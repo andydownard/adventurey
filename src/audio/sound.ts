@@ -5,7 +5,7 @@ const MUTE_KEY = 'adventurey.muted';
 
 type Sfx =
   | 'swing' | 'bow' | 'crossbow' | 'hit' | 'poof' | 'bigPoof' | 'snack' | 'dizzy'
-  | 'frost' | 'yip' | 'hoot' | 'staff' | 'bonk' | 'spawn' | 'sunrise' | 'campFell' | 'click';
+  | 'frost' | 'yip' | 'hoot' | 'staff' | 'bonk' | 'spawn' | 'sunrise' | 'campFell' | 'click' | 'chime' | 'whoosh';
 
 class SoundManager {
   private ctx: AudioContext | null = null;
@@ -154,6 +154,8 @@ class SoundManager {
       case 'sunrise': [523, 659, 784, 1047, 1319].forEach((f, i) => this.tone(f, 0.9, { type: 'triangle', vol: 0.12, attack: 0.03, at: i * 0.14 })); break;
       case 'campFell': [392, 330, 262].forEach((f, i) => this.tone(f, 0.5, { type: 'triangle', vol: 0.12, at: i * 0.22 })); break;
       case 'click': this.tone(1200, 0.04, { type: 'sine', vol: 0.06 }); break;
+      case 'chime': [1319, 1568, 2093].forEach((f, i) => this.tone(f, 0.35, { type: 'sine', vol: 0.1, attack: 0.005, at: i * 0.07 })); break;
+      case 'whoosh': this.hiss(0.6, { freq: 400, to: 1200, q: 0.8, vol: 0.18 }); break;
     }
   }
 

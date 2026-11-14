@@ -1,6 +1,6 @@
-import { ALLIES, HERO, MONSTERS, NIGHT, PETS, RANGED, REWARDS, SWORD, WORLD } from './config';
+import { ALLIES, CRYSTALS, HERO, MONSTERS, NIGHT, PETS, RANGED, REGIONS, REWARDS, SWORD, WILD, WORLD, type RegionId } from './config';
 import { makeRng, pick, type Rng } from './rng';
-import { dist, moveHero, norm, type Vec } from './world';
+import { dist, isWalkable, moveHero, norm, regionAt, toWorld, type Vec } from './world';
 
 export type PetKind = 'dragon' | 'wolf' | 'owl';
 export type RangedKind = 'bow' | 'crossbow';
@@ -30,6 +30,24 @@ export interface Monster {
   maxHp: number;
   slow: number;
   hitFlash: number;
+  /** Set for monsters that live out in the wild instead of raiding camp. */
+  wild?: { slot: number; home: Vec; target: Vec };
+}
+
+/** A place out in the wild where one monster lives. It comes back a while after being sent home. */
+export interface WildSlot {
+  region: Exclude<RegionId, 'camp'>;
+  home: Vec;
+  size: MonsterSize;
+  monsterId: number | null;
+  backAt: number;
+}
+
+export interface Crystal {
+  id: number;
+  region: Exclude<RegionId, 'camp'>;
+  pos: Vec;
+  taken: boolean;
 }
 
 export interface Arrow {
@@ -82,6 +100,8 @@ export type NightEvent =
   | { type: 'petAttack'; kind: PetKind; from: Vec; to: Vec }
   | { type: 'allyAttack'; kind: AllyKind; from: Vec; to: Vec }
   | { type: 'arrowGone'; id: number }
+  | { type: 'crystal'; id: number; at: Vec; found: number }
+  | { type: 'region'; region: RegionId }
   | { type: 'sunrise' }
   | { type: 'campFell' };
 
@@ -100,6 +120,12 @@ export interface NightState {
   paceScale: number;
   nextId: number;
   bonks: number;
+  /** Crystals picked up out in the wild this night. */
+  crystalsFound: number;
+  crystals: Crystal[];
+  wild: WildSlot[];
+  /** Where the hero is right now. */
+  region: RegionId;
   outcome: Outcome;
   loadout: Loadout;
   rng: Rng;
@@ -121,6 +147,10 @@ export function createNight(loadout: Loadout, seed = 1, nightNumber = 1): NightS
     paceScale,
     nextId: 1,
     bonks: 0,
+    crystalsFound: 0,
+    crystals: REGIONS.flatMap((r) => r.crystals.map((c) => ({ id: 0, region: r.id, pos: toWorld(r, c), taken: false }))).map((c, i) => ({ ...c, id: i + 1 })),
+    wild: REGIONS.flatMap((r) => r.wanderers.map((w) => ({ region: r.id, home: toWorld(r, w), size: w.size, monsterId: null, backAt: 0 }))),
+    region: 'camp',
     outcome: 'playing',
     loadout,
     rng: makeRng(seed + nightNumber * 7919),
@@ -144,6 +174,11 @@ function damage(s: NightState, m: Monster, amount: number, by: 'sword' | 'arrow'
   ev.push({ type: 'hit', id: m.id, at: { ...m.pos }, by });
   if (m.hp <= 0) {
     s.monsters = s.monsters.filter((x) => x !== m);
+    if (m.wild) {
+      const slot = s.wild[m.wild.slot];
+      slot.monsterId = null;
+      slot.backAt = s.t + WILD.respawnSec;
+    }
     s.bonks += 1;
     ev.push({ type: 'poof', id: m.id, at: { ...m.pos }, size: m.size });
   }
@@ -179,6 +214,26 @@ function spawn(s: NightState, ev: NightEvent[]) {
   const m: Monster = { id: s.nextId++, size, pos: at, hp: stats.hp, maxHp: stats.hp, slow: 0, hitFlash: 0 };
   s.monsters.push(m);
   ev.push({ type: 'spawn', id: m.id, at: { ...at }, size });
+}
+
+function spawnWild(s: NightState, i: number, ev: NightEvent[]) {
+  const slot = s.wild[i];
+  const stats = MONSTERS[slot.size];
+  const m: Monster = { id: s.nextId++, size: slot.size, pos: { ...slot.home }, hp: stats.hp, maxHp: stats.hp, slow: 0, hitFlash: 0, wild: { slot: i, home: { ...slot.home }, target: { ...slot.home } } };
+  slot.monsterId = m.id;
+  s.monsters.push(m);
+  ev.push({ type: 'spawn', id: m.id, at: { ...m.pos }, size: m.size });
+}
+
+/** A new spot to roam to, near home and on open ground. */
+function roamTarget(s: NightState, home: Vec): Vec {
+  for (let i = 0; i < 8; i++) {
+    const a = s.rng() * Math.PI * 2;
+    const r = s.rng() * WILD.roamRadius;
+    const p = { x: home.x + Math.cos(a) * r, y: home.y + Math.sin(a) * r * 0.7 };
+    if (isWalkable(p)) return p;
+  }
+  return { ...home };
 }
 
 function nearestMonster(from: Vec, monsters: Monster[], range: number): Monster | null {
@@ -321,12 +376,32 @@ export function stepNight(s: NightState, dt: number, input: Input): NightEvent[]
     }
   }
 
-  // New monsters
+  // Which area is the hero in?
+  const here = regionAt(hero.pos) ?? s.region;
+  if (here !== s.region) {
+    s.region = here;
+    ev.push({ type: 'region', region: here });
+  }
+
+  // Crystals out in the wild
+  for (const c of s.crystals) {
+    if (!c.taken && dist(c.pos, hero.pos) <= CRYSTALS.pickupRadius) {
+      c.taken = true;
+      s.crystalsFound += 1;
+      ev.push({ type: 'crystal', id: c.id, at: { ...c.pos }, found: s.crystalsFound });
+    }
+  }
+
+  // New monsters. While the hero is out exploring, the pack holds camp and they come more slowly.
+  const away = s.region !== 'camp';
   while (s.t >= s.nextSpawn && s.t < s.length - 3) {
     spawn(s, ev);
     if (progress(s) >= NIGHT.pairAfter && s.rng() < NIGHT.pairChance) spawn(s, ev);
-    s.nextSpawn += spawnInterval(progress(s)) * s.paceScale;
+    s.nextSpawn += spawnInterval(progress(s)) * s.paceScale * (away ? NIGHT.awayGentler : 1);
   }
+  s.wild.forEach((slot, i) => {
+    if (slot.monsterId === null && s.t >= slot.backAt && s.t < s.length - 3) spawnWild(s, i, ev);
+  });
 
   // Monsters walk toward the campfire
   const fire = WORLD.fire;
@@ -335,8 +410,19 @@ export function stepNight(s: NightState, dt: number, input: Input): NightEvent[]
     m.hitFlash = Math.max(0, m.hitFlash - dt);
     const speed = st.speed * (m.slow > 0 ? PETS.dragon.slowFactor : 1);
     m.slow = Math.max(0, m.slow - dt);
-    m.pos = moveToward(m.pos, fire, speed * dt);
-    if (dist(m.pos, fire) <= fire.radius + st.radius * 0.5) {
+    if (m.wild) {
+      // Wild monsters roam near home, and chase the hero who wanders close.
+      const w = m.wild;
+      const chasing = dist(m.pos, hero.pos) <= WILD.chaseRange && dist(hero.pos, w.home) <= WILD.leash;
+      const goal = chasing ? hero.pos : w.target;
+      const next = moveToward(m.pos, goal, (chasing ? speed : WILD.roamSpeed) * dt);
+      if (isWalkable(next)) m.pos = next;
+      else if (!chasing) w.target = roamTarget(s, w.home);
+      if (!chasing && dist(m.pos, w.target) < 6) w.target = roamTarget(s, w.home);
+    } else {
+      m.pos = moveToward(m.pos, fire, speed * dt);
+    }
+    if (!m.wild && dist(m.pos, fire) <= fire.radius + st.radius * 0.5) {
       s.campHealth = Math.max(0, s.campHealth - st.campDamage);
       s.monsters = s.monsters.filter((x) => x !== m);
       ev.push({ type: 'snack', id: m.id, at: { ...m.pos }, campHealth: s.campHealth });
@@ -354,7 +440,7 @@ export function stepNight(s: NightState, dt: number, input: Input): NightEvent[]
   for (const a of [...s.arrows]) {
     a.pos = { x: a.pos.x + a.vel.x * dt, y: a.pos.y + a.vel.y * dt };
     a.life -= dt;
-    let gone = a.life <= 0 || a.pos.x < -50 || a.pos.y < -50 || a.pos.x > WORLD.width + 50 || a.pos.y > WORLD.height + 50;
+    let gone = a.life <= 0;
     for (const m of [...s.monsters]) {
       if (gone) break;
       if (a.hit.includes(m.id)) continue;
@@ -389,7 +475,7 @@ export function stepNight(s: NightState, dt: number, input: Input): NightEvent[]
 
 export function nightRewards(s: NightState) {
   return {
-    crystals: Math.floor(s.bonks / REWARDS.crystalsPerBonks),
+    crystals: Math.floor(s.bonks / REWARDS.crystalsPerBonks) + s.crystalsFound,
     dragonPower: s.outcome === 'sunrise' ? REWARDS.dragonPowerPerNight : 0,
   };
 }

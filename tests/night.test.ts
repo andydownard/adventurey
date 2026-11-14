@@ -1,7 +1,8 @@
-import { HERO, MONSTERS, NIGHT, RANGED, SWORD, WORLD } from '../src/game/config';
+import { CRYSTALS, HERO, MONSTERS, NIGHT, RANGED, REGIONS, REWARDS, SWORD, WILD, WORLD } from '../src/game/config';
 import { createNight, nightRewards, spawnInterval, stepNight, swordTargets, type Input, type Loadout, type Monster, type NightState } from '../src/game/night';
 import { makeRng } from '../src/game/rng';
-import { isWalkable, moveHero } from '../src/game/world';
+import type { Vec } from '../src/game/world';
+import { isWalkable, moveHero, regionAt, toWorld, worldBounds } from '../src/game/world';
 
 const idle: Input = { move: { x: 0, y: 0 }, swing: false, shoot: null };
 const loadout: Loadout = { pet: 'dragon', ranged: 'bow', pack: 'wolf' };
@@ -17,6 +18,7 @@ function quiet(l = loadout): NightState {
   const s = createNight({ ...l }, 3);
   s.nextSpawn = 1e9;
   s.pet.cd = 1e9;
+  s.wild = []; // no wild monsters unless a test adds them
   return s;
 }
 
@@ -226,5 +228,151 @@ describe('pack mates', () => {
     s.hero.pos = { x: 768, y: 1000 };
     for (let i = 0; i < 3000 && s.outcome === 'playing'; i++) stepNight(s, 0.05, idle);
     expect(s.outcome).toBe('campFell');
+  });
+});
+
+const right: Input = { move: { x: 1, y: 0 }, swing: false, shoot: null };
+const left: Input = { move: { x: -1, y: 0 }, swing: false, shoot: null };
+const up: Input = { move: { x: 0, y: -1 }, swing: false, shoot: null };
+const down: Input = { move: { x: 0, y: 1 }, swing: false, shoot: null };
+
+function walk(s: NightState, input: Input, seconds: number) {
+  const events = [];
+  for (let i = 0; i < seconds * 60; i++) events.push(...stepNight(s, 1 / 60, input));
+  return events;
+}
+
+describe('the open world', () => {
+  it('each wild area has open ground in the middle, and the dark between areas is not walkable', () => {
+    for (const r of REGIONS) {
+      const e = r.walk.ellipses[0];
+      expect(isWalkable(toWorld(r, { x: e.x, y: e.y }))).toBe(true);
+    }
+    expect(isWalkable({ x: -800, y: -600 })).toBe(false); // the dark corner above Snow Land
+    expect(regionAt({ x: -800, y: -600 })).toBe(null);
+  });
+
+  const trips: [string, Vec, Input, string][] = [
+    ['Snow Land, down the left trail', { x: 200, y: 535 }, left, 'snow'],
+    ['the Crystal Caves, down the right trail', { x: 1340, y: 535 }, right, 'cave'],
+    ['the Mountains, up the top trail', { x: 815, y: 150 }, up, 'mountain'],
+    ['the Old Forest, down the bottom trail', { x: 815, y: 880 }, down, 'forest'],
+  ];
+  for (const [name, start, input, region] of trips) {
+    it(`the hero can walk from camp to ${name}`, () => {
+      const s = quiet();
+      s.hero.pos = { ...start };
+      const events = walk(s, input, 2.5);
+      expect(s.region).toBe(region);
+      expect(events.some((e) => e.type === 'region' && e.region === region)).toBe(true);
+    });
+  }
+
+  it('the hero bumps into a big rock out in the wild', () => {
+    const cave = REGIONS.find((r) => r.id === 'cave')!;
+    const rock = toWorld(cave, cave.obstacles[0]);
+    const p = moveHero({ x: rock.x, y: rock.y + 140 }, { x: rock.x, y: rock.y + 20 }, HERO.radius);
+    expect(Math.hypot(p.x - rock.x, p.y - rock.y)).toBeGreaterThanOrEqual(cave.obstacles[0].r + HERO.radius - 0.001);
+  });
+
+  it('the world is big enough for all five areas', () => {
+    const b = worldBounds();
+    expect(b.w).toBeGreaterThanOrEqual(1536 * 3);
+    expect(b.h).toBeGreaterThanOrEqual(1024 * 3);
+  });
+});
+
+describe('crystals in the wild', () => {
+  it('are picked up by walking over them and add to the night\'s crystals', () => {
+    const s = quiet();
+    const c = s.crystals[0];
+    s.hero.pos = { x: c.pos.x - CRYSTALS.pickupRadius + 5, y: c.pos.y };
+    const events = walk(s, idle, 0.1);
+    expect(c.taken).toBe(true);
+    expect(s.crystalsFound).toBe(1);
+    expect(events.filter((e) => e.type === 'crystal')).toHaveLength(1);
+    // Standing there longer does not count it twice.
+    walk(s, idle, 0.5);
+    expect(s.crystalsFound).toBe(1);
+    expect(nightRewards(s).crystals).toBe(1);
+  });
+  it('every wild area has some to find', () => {
+    for (const r of REGIONS) expect(s0().crystals.filter((c) => c.region === r.id).length).toBeGreaterThanOrEqual(3);
+  });
+  it('sit on open ground the hero can reach', () => {
+    for (const c of s0().crystals) expect(isWalkable(c.pos)).toBe(true);
+  });
+});
+
+function s0() {
+  return createNight({ ...loadout }, 3);
+}
+
+describe('wild monsters', () => {
+  it('do not wait right at a trail entrance, so a hero arriving is not swarmed', () => {
+    const entrances = [{ x: -20, y: 535 }, { x: 1556, y: 535 }, { x: 815, y: -20 }, { x: 815, y: 1044 }];
+    for (const slot of s0().wild) for (const e of entrances) expect(Math.hypot(slot.home.x - e.x, slot.home.y - e.y)).toBeGreaterThan(WILD.chaseRange + 60);
+  });
+  it('appear in every area at the start of the night, and never go for the campfire', () => {
+    const s = quiet();
+    s.wild = s0().wild;
+    walk(s, idle, 5);
+    const wild = s.monsters.filter((m) => m.wild);
+    expect(wild.length).toBe(s.wild.length);
+    for (const r of REGIONS) expect(wild.some((m) => regionAt(m.pos) === r.id)).toBe(true);
+    expect(s.campHealth).toBe(s.maxCampHealth);
+  });
+  it('live on open ground', () => {
+    for (const slot of s0().wild) expect(isWalkable(slot.home)).toBe(true);
+  });
+  it('chase the hero who comes close', () => {
+    const s = quiet();
+    s.wild = s0().wild.slice(0, 1);
+    walk(s, idle, 0.1);
+    const m = s.monsters[0];
+    s.hero.pos = { x: m.pos.x + WILD.chaseRange - 40, y: m.pos.y };
+    s.hero.pos = isWalkable(s.hero.pos) ? s.hero.pos : { x: m.pos.x - WILD.chaseRange + 40, y: m.pos.y };
+    const before = Math.hypot(m.pos.x - s.hero.pos.x, m.pos.y - s.hero.pos.y);
+    walk(s, idle, 0.5);
+    expect(Math.hypot(m.pos.x - s.hero.pos.x, m.pos.y - s.hero.pos.y)).toBeLessThan(before - 15);
+  });
+  it('come back a while after being sent home', () => {
+    const s = quiet();
+    s.wild = s0().wild.slice(0, 1);
+    walk(s, idle, 0.1);
+    const m = s.monsters[0];
+    s.hero.pos = { x: m.pos.x - 60, y: m.pos.y };
+    s.hero.facing = { x: 1, y: 0 };
+    stepNight(s, 1 / 60, { ...idle, swing: true });
+    expect(s.monsters.some((x) => x.wild)).toBe(m.hp > 0);
+    if (m.hp > 0) return;
+    s.hero.pos = { x: WORLD.heroStart.x, y: WORLD.heroStart.y };
+    walk(s, idle, WILD.respawnSec - 1);
+    expect(s.monsters.some((x) => x.wild)).toBe(false);
+    walk(s, idle, 2);
+    expect(s.monsters.some((x) => x.wild)).toBe(true);
+  });
+});
+
+describe('the pack holds camp while the hero explores', () => {
+  function raidersAfter(heroAt: Vec) {
+    const s = createNight({ ...loadout }, 11);
+    s.wild = [];
+    s.pet.cd = 1e9;
+    s.hero.pos = { ...heroAt };
+    let raiders = 0;
+    for (let i = 0; i < 60 * 60; i++) for (const e of stepNight(s, 1 / 60, idle)) if (e.type === 'spawn') raiders++;
+    return raiders;
+  }
+  it('fewer monsters come to camp while the hero is away', () => {
+    const snow = REGIONS.find((r) => r.id === 'snow')!;
+    const home = raidersAfter(WORLD.heroStart);
+    const out = raidersAfter(toWorld(snow, { x: 800, y: 500 }));
+    expect(out).toBeLessThan(home);
+    expect(out).toBeGreaterThan(0); // they still come, so camp still needs the hero
+  });
+  it('the night is long enough to explore', () => {
+    expect(NIGHT.lengthSec).toBeGreaterThanOrEqual(120);
+    expect(REWARDS.crystalsPerBonks).toBeGreaterThan(0);
   });
 });

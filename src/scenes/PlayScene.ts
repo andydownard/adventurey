@@ -1,9 +1,10 @@
 import Phaser from 'phaser';
 import { sound } from '../audio/sound';
 import { COPY } from '../data/copy';
-import { MONSTERS, SWORD, WORLD } from '../game/config';
+import { CAMP_AMBIENT, MONSTERS, REGIONS, SWORD, TILE, WORLD, type RegionId } from '../game/config';
 import { createNight, nightRewards, stepNight, type Input, type Loadout, type MonsterSize, type NightEvent, type NightState } from '../game/night';
 import type { Controls, Hud } from '../ui/hud';
+import { regionById, toWorld, worldBounds } from '../game/world';
 
 export interface PlayInit {
   loadout: Loadout;
@@ -16,7 +17,9 @@ export interface PlayInit {
 }
 
 const STEP = 1 / 60;
-const AMBIENT_NIGHT = 0x4a5384;
+const AMBIENT_NIGHT = CAMP_AMBIENT;
+// Crystal colors in each wild area.
+const GEM_TINT: Record<Exclude<RegionId, 'camp'>, number> = { snow: 0x9fe0ff, forest: 0x7ff0d8, cave: 0xd09cff, mountain: 0xf0f4ff };
 // Walk-cycle sprite sheets (4 frames each). Hero and pack mates are drawn facing left; pets face right.
 const SHEETS = {
   hero: { file: 'hero-walk.png', w: 135, h: 258, fps: 9, scale: 0.46, facesLeft: true },
@@ -31,7 +34,7 @@ const SWING_SEC = 0.18;
 const SWORD_COOLDOWN = SWORD.cooldownSec;
 const MONSTER_TINT: Record<MonsterSize, number> = { small: 0xb4cdf0, normal: 0xc4bce0, big: 0xd0bcf0 };
 
-interface MonsterView { spr: Phaser.GameObjects.Image; shadow: Phaser.GameObjects.Image; glow: Phaser.GameObjects.Image; size: MonsterSize; seed: number }
+interface MonsterView { spr: Phaser.GameObjects.Image; shadow: Phaser.GameObjects.Image; glow: Phaser.GameObjects.Image; size: MonsterSize; seed: number; tint: number; lastX: number }
 
 export class PlayScene extends Phaser.Scene {
   private cfg!: PlayInit;
@@ -57,6 +60,12 @@ export class PlayScene extends Phaser.Scene {
   private keys!: Record<string, Phaser.Input.Keyboard.Key>;
   private queuedShot: { x: number; y: number } | null = null;
   private dizzyText?: Phaser.GameObjects.Text;
+  private gems = new Map<number, { spr: Phaser.GameObjects.Image; glow: Phaser.GameObjects.Image; seed: number }>();
+  private staticLights = 0;
+  private ambient = AMBIENT_NIGHT;
+  private ambientTween?: Phaser.Tweens.Tween;
+  private campPointer!: Phaser.GameObjects.Container;
+  private seenGuardNote = false;
 
   constructor() {
     super('play');
@@ -72,10 +81,14 @@ export class PlayScene extends Phaser.Scene {
     this.monsters = new Map();
     this.arrows = new Map();
     this.queuedShot = null;
+    this.gems = new Map();
+    this.ambient = AMBIENT_NIGHT;
+    this.seenGuardNote = false;
   }
 
   preload() {
     this.load.image('map', 'art/camp-map.jpg');
+    for (const r of REGIONS) this.load.image(`region-${r.id}`, `art/${r.image}`);
     this.load.image('gloom', 'art/sprite-gloom.png');
     for (const [key, sh] of Object.entries(SHEETS)) this.load.spritesheet(`sheet-${key}`, `art/${sh.file}`, { frameWidth: sh.w, frameHeight: sh.h });
   }
@@ -142,6 +155,30 @@ export class PlayScene extends Phaser.Scene {
       c.fillStyle = '#c9b8f2';
       c.fillRect(0, 2, 10, 2); c.fillRect(0, 8, 10, 2);
     });
+    canvas('gem', 64, 80, (c) => {
+      // A small cluster of three crystals, white so it can be tinted per area.
+      const shard = (x: number, w: number, hgt: number, lean: number) => {
+        const g = c.createLinearGradient(x - w, 0, x + w, 0);
+        g.addColorStop(0, 'rgba(200,210,255,.85)');
+        g.addColorStop(0.5, 'rgba(255,255,255,1)');
+        g.addColorStop(1, 'rgba(170,180,230,.85)');
+        c.fillStyle = g;
+        c.beginPath();
+        c.moveTo(x - w, 78); c.lineTo(x - w * 0.9 + lean, 78 - hgt * 0.75); c.lineTo(x + lean, 78 - hgt); c.lineTo(x + w * 0.9 + lean, 78 - hgt * 0.75); c.lineTo(x + w, 78);
+        c.closePath(); c.fill();
+        c.strokeStyle = 'rgba(255,255,255,.9)'; c.lineWidth = 1.5; c.stroke();
+      };
+      shard(18, 9, 44, -6);
+      shard(46, 9, 40, 6);
+      shard(32, 12, 72, 0);
+    });
+    canvas('pointer', 64, 64, (c) => {
+      c.fillStyle = '#ffd9b0';
+      c.strokeStyle = '#2a1c22';
+      c.lineWidth = 4;
+      c.beginPath(); c.moveTo(60, 32); c.lineTo(14, 10); c.lineTo(24, 32); c.lineTo(14, 54); c.closePath();
+      c.stroke(); c.fill();
+    });
     canvas('vignette', 1280, 800, (c) => {
       const g = c.createRadialGradient(640, 400, 260, 640, 400, 820);
       g.addColorStop(0, 'rgba(4,6,20,0)');
@@ -162,12 +199,26 @@ export class PlayScene extends Phaser.Scene {
     this.lit = this.renderer.type === Phaser.WEBGL;
     const lit = <T extends Phaser.GameObjects.Image>(o: T): T => (this.lit ? (o.setPipeline('Light2D') as T) : o);
 
-    // The painted camp, lit by moonlight and the fire.
+    // The painted camp in the middle, with the four wild areas around it, lit by moonlight and the fire.
     lit(this.add.image(0, 0, 'map').setOrigin(0, 0).setDepth(-10000));
+    for (const r of REGIONS) lit(this.add.image(r.offset.x, r.offset.y, `region-${r.id}`).setOrigin(0, 0).setDepth(-10000));
     if (this.lit) {
       this.lights.enable().setAmbientColor(AMBIENT_NIGHT);
       this.fireLight = this.lights.addLight(WORLD.fire.x, WORLD.fire.y, 460, 0xffa45c, 2.2);
       this.heroLight = this.lights.addLight(0, 0, 230, 0xb8d4ff, 0.85);
+      // Glowing ice, mushrooms and cave crystals.
+      for (const r of REGIONS) for (const l of r.lights) { const p = toWorld(r, l); this.lights.addLight(p.x, p.y, l.radius, l.color, l.intensity); }
+      this.staticLights = this.lights.getLightCount();
+    }
+    this.cameras.main.setBackgroundColor('#02030a');
+    this.wildWeather();
+
+    // Crystals to find out in the wild.
+    for (const c of this.s.crystals) {
+      const tint = GEM_TINT[c.region];
+      const glow = this.add.image(c.pos.x, c.pos.y - 18, 'soft').setBlendMode(Phaser.BlendModes.ADD).setTint(tint).setScale(1.5, 1.1).setAlpha(0.8).setDepth(c.pos.y - 1);
+      const spr = this.add.image(c.pos.x, c.pos.y, 'gem').setOrigin(0.5, 1).setTint(tint).setScale(0.62).setDepth(c.pos.y);
+      this.gems.set(c.id, { spr, glow, seed: c.id * 2.3 });
     }
 
     // Fire: flames, embers and smoke.
@@ -224,8 +275,15 @@ export class PlayScene extends Phaser.Scene {
 
     this.add.image(0, 0, 'vignette').setOrigin(0, 0).setScrollFactor(0).setDepth(100000);
 
+    // An arrow at the screen edge that points home when camp is out of sight.
+    this.campPointer = this.add.container(0, 0, [
+      this.add.image(0, 0, 'pointer').setScale(0.8),
+      this.add.text(0, 34, COPY.campArrow, { fontFamily: 'Nunito', fontStyle: '800', fontSize: '18px', color: '#ffd9b0', stroke: '#0b1028', strokeThickness: 5 }).setOrigin(0.5),
+    ]).setScrollFactor(0).setDepth(100001).setVisible(false);
+
     const cam = this.cameras.main;
-    cam.setBounds(0, 0, WORLD.width, WORLD.height);
+    const wb = worldBounds();
+    cam.setBounds(wb.x, wb.y, wb.w, wb.h);
     cam.startFollow(this.hero, true, 0.08, 0.08);
     cam.fadeIn(600, 4, 6, 20);
 
@@ -307,7 +365,7 @@ export class PlayScene extends Phaser.Scene {
   }
 
   private flash(x: number, y: number, color: number, radius = 160, intensity = 1.6) {
-    if (!this.lit || this.lights.getLightCount() > 14) return;
+    if (!this.lit || this.lights.getLightCount() > this.staticLights + 5) return;
     const light = this.lights.addLight(x, y, radius, color, intensity);
     this.tweens.add({ targets: light, intensity: 0, duration: 380, onComplete: () => this.lights.removeLight(light) });
   }
@@ -318,13 +376,15 @@ export class PlayScene extends Phaser.Scene {
         case 'spawn': {
           const st = MONSTERS[e.size];
           const shadow = this.add.image(e.at.x, e.at.y, 'shadow').setScale(st.scale * 1.5, st.scale * 1.4).setAlpha(0);
-          const spr = this.add.image(e.at.x, e.at.y, 'gloom').setOrigin(0.5, 0.92).setScale(st.scale * 0.2).setAlpha(0).setTint(MONSTER_TINT[e.size]);
+          const wild = this.s.monsters.find((m) => m.id === e.id)?.wild;
+          const tint = wild ? regionById(this.s.wild[wild.slot].region)!.tint : MONSTER_TINT[e.size];
+          const spr = this.add.image(e.at.x, e.at.y, 'gloom').setOrigin(0.5, 0.92).setScale(st.scale * 0.2).setAlpha(0).setTint(tint);
           // Monsters stay unlit on purpose, so kids can always spot them in the dark woods.
           const glow = this.add.image(e.at.x, e.at.y, 'soft').setBlendMode(Phaser.BlendModes.ADD).setTint(0xc9b8f2).setScale(st.scale * 1.9, st.scale * 1.1).setAlpha(0);
           this.tweens.add({ targets: spr, scale: st.scale, alpha: 1, duration: 500, ease: 'Back.easeOut' });
           this.tweens.add({ targets: shadow, alpha: 0.75, duration: 500 });
           this.tweens.add({ targets: glow, alpha: 0.95, duration: 500 });
-          this.monsters.set(e.id, { spr, shadow, glow, size: e.size, seed: e.id * 1.7 });
+          this.monsters.set(e.id, { spr, shadow, glow, size: e.size, seed: e.id * 1.7, tint, lastX: e.at.x });
           if (Math.hypot(e.at.x - this.s.hero.pos.x, e.at.y - this.s.hero.pos.y) < 700) sound.play('spawn');
           break;
         }
@@ -413,6 +473,28 @@ export class PlayScene extends Phaser.Scene {
           }
           break;
         }
+        case 'crystal': {
+          const g = this.gems.get(e.id);
+          this.fx.spark.explode(18, e.at.x, e.at.y - 30);
+          this.flash(e.at.x, e.at.y - 30, 0xd8c8ff, 160, 1.2);
+          sound.play('chime');
+          this.floatText(e.at.x, e.at.y - 90, COPY.crystalPlus, '#d8c8ff', 26);
+          if (g) {
+            this.gems.delete(e.id);
+            this.tweens.add({ targets: g.spr, y: g.spr.y - 60, alpha: 0, scale: 0.9, duration: 500, ease: 'Cubic.easeOut', onComplete: () => g.spr.destroy() });
+            this.tweens.add({ targets: g.glow, alpha: 0, duration: 400, onComplete: () => g.glow.destroy() });
+          }
+          break;
+        }
+        case 'region': {
+          const info = COPY.regions[e.region];
+          const out = e.region !== 'camp';
+          this.cfg.hud.banner(info.name, out && !this.seenGuardNote ? COPY.packGuarding : info.line);
+          if (out) this.seenGuardNote = true;
+          sound.play('whoosh');
+          this.fadeAmbient(out ? regionById(e.region)!.ambient : AMBIENT_NIGHT);
+          break;
+        }
         case 'sunrise':
           this.finish(true);
           break;
@@ -432,7 +514,8 @@ export class PlayScene extends Phaser.Scene {
     const r = nightRewards(this.s);
     const done = () => this.cfg.onEnd({ saved, bonks: this.s.bonks, crystals: r.crystals, dragonPower: r.dragonPower });
     if (saved && this.lit) {
-      const from = Phaser.Display.Color.ValueToColor(AMBIENT_NIGHT);
+      this.ambientTween?.stop();
+      const from = Phaser.Display.Color.ValueToColor(this.ambient);
       const to = Phaser.Display.Color.ValueToColor(0xffd2b0);
       this.tweens.addCounter({
         from: 0, to: 100, duration: 2200,
@@ -447,6 +530,51 @@ export class PlayScene extends Phaser.Scene {
       this.cameras.main.fadeOut(1400, 4, 6, 20);
       this.time.delayedCall(1500, done);
     }
+  }
+
+  /** Falling snow, drifting cave sparkles and forest fireflies, each only in its own area. */
+  private wildWeather() {
+    const area = (id: RegionId, pad = 120) => {
+      const r = regionById(id)!;
+      return { x: { min: r.offset.x + pad, max: r.offset.x + TILE.w - pad }, y: { min: r.offset.y + pad, max: r.offset.y + TILE.h - pad } };
+    };
+    const twinkle = { onUpdate: (_p: unknown, _k: string, t: number) => Math.sin(Math.PI * t) };
+    this.add.particles(0, 0, 'soft', { ...area('snow', 40), speedY: { min: 30, max: 60 }, speedX: { min: -20, max: 10 }, scale: { min: 0.05, max: 0.11 }, lifespan: 5000, frequency: 40, tint: 0xeef6ff, alpha: twinkle }).setDepth(5000);
+    this.add.particles(0, 0, 'soft', { ...area('cave'), speedY: { min: -18, max: -6 }, speedX: { min: -8, max: 8 }, scale: 0.1, lifespan: 4000, frequency: 160, blendMode: 'ADD', tint: [0xd09cff, 0x7fffb0], alpha: twinkle }).setDepth(5000);
+    this.add.particles(0, 0, 'soft', { ...area('forest'), speedX: { min: -14, max: 14 }, speedY: { min: -12, max: 10 }, scale: 0.13, lifespan: 4200, frequency: 150, blendMode: 'ADD', tint: 0xd8ffe4, alpha: twinkle }).setDepth(5000);
+  }
+
+  private fadeAmbient(to: number) {
+    if (!this.lit) return;
+    this.ambientTween?.stop();
+    const from = Phaser.Display.Color.ValueToColor(this.ambient);
+    const target = Phaser.Display.Color.ValueToColor(to);
+    this.ambient = to;
+    this.ambientTween = this.tweens.addCounter({
+      from: 0, to: 100, duration: 1200,
+      onUpdate: (tw) => {
+        const c = Phaser.Display.Color.Interpolate.ColorWithColor(from, target, 100, tw.getValue() ?? 0);
+        this.lights.setAmbientColor(Phaser.Display.Color.GetColor(c.r, c.g, c.b));
+      },
+    });
+  }
+
+  /** Point to camp from the edge of the screen while camp is out of sight. */
+  private pointHome() {
+    const cam = this.cameras.main;
+    const fx = WORLD.fire.x - cam.scrollX;
+    const fy = WORLD.fire.y - cam.scrollY;
+    const W = cam.width, H = cam.height;
+    const onScreen = fx > 60 && fx < W - 60 && fy > 60 && fy < H - 60;
+    this.campPointer.setVisible(!onScreen && !this.ending);
+    if (onScreen) return;
+    const cx = W / 2, cy = H / 2;
+    const ang = Math.atan2(fy - cy, fx - cx);
+    // Sit on an ellipse inside the screen edge, clear of the top and bottom bars.
+    const px = cx + Math.cos(ang) * (W / 2 - 90);
+    const py = cy + Math.sin(ang) * (H / 2 - 150);
+    this.campPointer.setPosition(px, py);
+    (this.campPointer.list[0] as Phaser.GameObjects.Image).setRotation(ang);
   }
 
   private animate(spr: Phaser.GameObjects.Sprite, key: SheetKey, moving: boolean) {
@@ -513,14 +641,21 @@ export class PlayScene extends Phaser.Scene {
       const wob = Math.sin(t * 5 + v.seed) * 4;
       const sc = MONSTERS[m.size].scale;
       v.spr.setPosition(m.pos.x, m.pos.y + wob).setDepth(m.pos.y);
-      v.spr.setFlipX(m.pos.x > WORLD.fire.x);
+      if (Math.abs(m.pos.x - v.lastX) > 0.2) v.spr.setFlipX(m.pos.x < v.lastX);
+      v.lastX = m.pos.x;
       v.spr.setAngle(Math.sin(t * 3 + v.seed) * 5);
       if (m.hitFlash > 0) v.spr.setTint(0xfff0c8);
       else if (m.slow > 0) v.spr.setTint(0x9fd3f2);
-      else v.spr.setTint(MONSTER_TINT[m.size]);
+      else v.spr.setTint(v.tint);
       v.glow.setPosition(m.pos.x, m.pos.y + wob - 200 * sc * 0.42).setDepth(m.pos.y + 1);
       v.shadow.setPosition(m.pos.x, m.pos.y).setDepth(m.pos.y - 1);
     }
+
+    for (const [, g] of this.gems) {
+      g.spr.setScale(0.62 + Math.sin(t * 2.2 + g.seed) * 0.03);
+      g.glow.setAlpha(0.55 + Math.sin(t * 3 + g.seed) * 0.25);
+    }
+    this.pointHome();
 
     const live = new Set<number>();
     for (const a of s.arrows) {

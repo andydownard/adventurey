@@ -17,6 +17,8 @@ export interface Hud {
   el: HTMLElement;
   update(s: NightState): void;
   flashCamp(): void;
+  /** A big title at the top of the screen when the hero walks into a new area. */
+  banner(title: string, line: string): void;
 }
 
 const PACK_ART = { wolf: 'art/wolf.jpg', dragon: 'art/packdragon.jpg' } as const;
@@ -31,6 +33,10 @@ export function createHud(opts: { name: string; pack: 'wolf' | 'dragon'; ranged:
     h('div', { style: 'display:flex;justify-content:space-between;font-weight:800;font-size:18px' }, h('span', {}, COPY.hud.camp), campText),
     h('div', { class: 'bar', role: 'progressbar', 'aria-label': 'Camp health' }, campFill));
   const bonkText = h('b', { style: 'font:800 26px Cinzel,serif;color:var(--green)' }, '0');
+  const gemText = h('b', { style: 'font:800 26px Cinzel,serif;color:#c9b8f2' }, '0');
+  const bannerTitle = h('div', { class: 'banner-title' }, '');
+  const bannerLine = h('div', { class: 'banner-line' }, '');
+  const banner = h('div', { class: 'region-banner', role: 'status', 'aria-live': 'polite' }, bannerTitle, bannerLine);
   const swordCool = h('div', { class: 'cool', style: 'height:0%' });
   const shotCool = h('div', { class: 'cool', style: 'height:0%' });
 
@@ -48,14 +54,15 @@ export function createHud(opts: { name: string; pack: 'wolf' | 'dragon'; ranged:
       h('button', { class: 'icon-btn', type: 'button', 'aria-label': COPY.hud.pause, style: 'position:static', onclick: opts.onPause }, svgIcon(ICONS.pause))));
 
   const bottom = h('div', { class: 'hud-bottom' },
-    h('div', { class: 'pill', style: 'flex-direction:column;align-items:flex-start;gap:0;border-radius:20px;padding:10px 18px' },
-      h('span', { style: 'font-size:15px;font-weight:800;color:var(--lav)' }, COPY.hud.bonks), bonkText),
+    h('div', { class: 'pill', style: 'gap:22px;border-radius:20px;padding:10px 18px' },
+      h('div', { style: 'display:flex;flex-direction:column' }, h('span', { style: 'font-size:15px;font-weight:800;color:var(--lav)' }, COPY.hud.bonks), bonkText),
+      h('div', { style: 'display:flex;flex-direction:column' }, h('span', { style: 'font-size:15px;font-weight:800;color:var(--lav)' }, COPY.hud.crystals), gemText)),
     h('div', { style: 'display:flex;gap:12px;padding:10px;border-radius:24px;background:rgba(6,9,20,.55)' },
       h('div', { class: 'slot' }, swordCool, h('img', { src: 'art/iron.jpg', alt: '' }), COPY.hud.sword, opts.touch ? null : h('kbd', {}, 'Space')),
       h('div', { class: 'slot' }, shotCool, h('img', { src: RANGED_ART[opts.ranged], alt: '' }), COPY.hud[opts.ranged], opts.touch ? null : h('kbd', {}, 'Click'))),
     h('div', { style: 'width:150px' }));
 
-  const el = h('div', { class: 'hud' }, top, bottom);
+  const el = h('div', { class: 'hud' }, top, banner, bottom);
 
   if (opts.touch) {
     const nub = h('div', { class: 'nub' });
@@ -88,6 +95,13 @@ export function createHud(opts: { name: string; pack: 'wolf' | 'dragon'; ranged:
   let lastCamp = -1;
   return {
     el,
+    banner(title, line) {
+      bannerTitle.textContent = title;
+      bannerLine.textContent = line;
+      banner.classList.remove('show');
+      void banner.offsetWidth;
+      banner.classList.add('show');
+    },
     flashCamp() {
       campBox.classList.remove('hurt');
       void campBox.offsetWidth;
@@ -105,6 +119,8 @@ export function createHud(opts: { name: string; pack: 'wolf' | 'dragon'; ranged:
       }
       const b = String(s.bonks);
       if (bonkText.textContent !== b) bonkText.textContent = b;
+      const g = String(s.crystalsFound);
+      if (gemText.textContent !== g) gemText.textContent = g;
       swordCool.style.height = `${Math.min(100, (s.hero.swordCd / SWORD.cooldownSec) * 100)}%`;
       const shotMax = RANGED[s.loadout.ranged].cooldownSec;
       shotCool.style.height = `${Math.min(100, (s.hero.shotCd / shotMax) * 100)}%`;

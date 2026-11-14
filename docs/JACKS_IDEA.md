@@ -31,3 +31,4 @@ Design only. No code yet.
 - The pack members wear wolf hats (for the Wolf Pack), with arms and real clothes.
 - A "Play with friends" circle, and a moon you tap to type your name. Any name works, even a made-up one like Wolf.
 - Explore anywhere you want. Places include Aspen Forest, Cherry Blossom Valley, and the Ruins.
+- Built (2026-11-14): at night you can leave camp while your pack battles, and walk anywhere in a snow land, a forest, a cave area, and a mountain range. It is 2.5D everywhere.

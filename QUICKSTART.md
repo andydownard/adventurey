@@ -2,7 +2,7 @@
 
 Adventure-y is a browser game. Guard the pack camp from cute-spooky monsters until sunrise.
 
-Play it online: the Railway address (works on an iPad held sideways).
+Play it online: https://adventurey.rallytasks.com (Railway; works on an iPad held sideways).
 
 ## 1. Set up (one time)
 You need Node 20 or newer.

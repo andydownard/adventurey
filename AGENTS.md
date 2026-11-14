@@ -10,25 +10,27 @@
 **Read first:** [docs/HOW_WE_BUILD_GAMES.md](./docs/HOW_WE_BUILD_GAMES.md) → this file. Worked examples from Time Clash are in [docs/time_clash_reference/](./docs/time_clash_reference/).
 
 ## What this is
-Jack's game. You pick a pet (baby dragon, wolf pup or snow owl), a bow or crossbow, and a pack (Wolf Pack or Dragon Pack). Then you guard the campfire through a 90-second night. Cute-spooky monsters walk in from the woods to steal snacks. Bonk them with the sword, shoot them, and your pet helps. Save the camp until sunrise to earn crystals and dragon power. Ideas and design decisions: [docs/JACKS_IDEA.md](./docs/JACKS_IDEA.md). Design canvas and art: `design/`.
+Jack's game. You pick a pet (baby dragon, wolf pup or snow owl), a bow or crossbow, and a pack (Wolf Pack or Dragon Pack). Then you guard the campfire through a 2-minute night, and can run out to explore four wild areas while your pack holds camp. Cute-spooky monsters walk in from the woods to steal snacks. Bonk them with the sword, shoot them, and your pet helps. Save the camp until sunrise to earn crystals and dragon power. Ideas and design decisions: [docs/JACKS_IDEA.md](./docs/JACKS_IDEA.md). Design canvas and art: `design/`.
 
 Owner: Andy Downard. Built for and with his family. Stack choices favor simple, free, and fast to change.
 
 ## Stack
-TypeScript · Vite · Phaser 3.90 (WebGL with Light2D lighting) · plain DOM and CSS for menus and the in-game display · Vitest · Playwright for a smoke check. Fonts self-hosted (@fontsource). Art made with Figma AI (file "Adventure-y concept art"). No server, no network calls, progress saved in localStorage.
+TypeScript · Vite · Phaser 3.90 (WebGL with Light2D lighting) · plain DOM and CSS for menus and the in-game display · Vitest · Playwright for a smoke check. Fonts self-hosted (@fontsource). Art made with Figma AI (files "Adventure-y concept art" and "Adventure-y open world regions"). No server, no network calls, progress saved in localStorage.
 
 ## Commands
 test: `npm test` · lint: `npm run lint` (types + banned-word check) · typecheck: `npm run typecheck` · build: `npm run build` · run: `npm run dev` · browser smoke: `npm run smoke` (with `npx vite preview --port 4173` running)
 
 ## Current state (2026-11-14)
-Phase 1 is built. It is hosted on Railway, which rebuilds from `main` on every push (`railway.json`: `npm run build`, then `npm start` serves `dist/`). Do not host it on GitHub Pages.
+Phase 1 is built. It is hosted on Railway at https://adventurey.rallytasks.com (project "Games", service "adventurey"), which rebuilds from `main` on every push (`railway.json`: `npm run build`, then `npm start` serves `dist/`). Do not host it on GitHub Pages.
 - Start screen: moon name, Play, Choose your gear, Choose your pack, sound on/off. Explore and Play with friends carry a "Coming soon" tag.
-- One night of camp defense with walking sprites for the hero, pet, and two pack mates (staff and shield). Pack mates guard the fire but only help a little; the hero is the main fighter.
+- A 2-minute night of camp defense with walking sprites for the hero, pet, and two pack mates (staff and shield). Pack mates guard the fire but only help a little; the hero is the main fighter.
 - The sword is its own sprite and sweeps on Space or the Sword button.
 - Sound is made in code (`src/audio/sound.ts`, no files). It starts only after a tap or key press. The mute choice is saved.
 - iPad: joystick and Sword button, tap the field to shoot, no zoom or text selection, and a "turn sideways" message in portrait. Checked by `scripts/smoke-ipad.mjs`.
 - Rules live in `src/game/` with no Phaser imports; every balance number is in `src/game/config.ts`.
-- Next: open world at night (snow land, forest, cave area, mountain range) while the pack guards camp.
+- Open world: four painted areas join the camp at its trails: Snow Land (left), Crystal Caves (right), Mountain Range (top), Old Forest (bottom). The hero can walk out any time. Each area has crystals to pick up, wild monsters that roam and chase, its own glow and moonlight color, and a title banner on arrival. An arrow points back to camp.
+- While the hero is out, monsters reach camp 1.6x more slowly (the pack holds the line), but a camp left alone all night still falls.
+- Area shapes, lights, crystals and wild monsters are in `REGIONS` in `src/game/config.ts`, in each picture's own coordinates. Map edges are darkened into the pictures by `bake_edges.py` (kept outside the repo with the original art), leaving trail crossings lit.
 
 ## Vocabulary
 | User sees | Code uses | NEVER say in UI |
@@ -53,6 +55,7 @@ To be written.
 |---|---|---|
 | 1 | The night's overlay layer covered the game, so taps and clicks on the field did nothing | Layer uses `pointer-events:none`; `smoke-ipad.mjs` checks a tap shoots |
 | 2 | Space swung in the rules but nothing moved on screen | Separate sword sprite; `smoke-ipad.mjs` checks the sweep is seen |
+| 3 | Wild monsters waited at trail entrances, so a hero arriving got dizzy at once | Test "do not wait right at a trail entrance" in `tests/night.test.ts` |
 
 ## Doc index
 | Topic | File |

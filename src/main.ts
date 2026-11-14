@@ -111,7 +111,7 @@ function startNight() {
   const intro = h('div', { class: 'overlay', style: 'pointer-events:auto', role: 'dialog', 'aria-label': `Night ${nightNumber}` },
     h('div', { class: 'panel' },
       h('h2', {}, `Night ${nightNumber}`),
-      h('p', {}, 'Monsters come out of the woods and try to steal snacks from the campfire. Keep them away until sunrise!'),
+      h('p', {}, COPY.nightIntro),
       h('div', { class: 'keys' }, ...(isTouch ? [h('span', { class: 'key' }, COPY.howToTouch)] : [
         h('span', { class: 'key' }, 'Move: WASD or arrows'),
         h('span', { class: 'key' }, 'Sword: Space'),
