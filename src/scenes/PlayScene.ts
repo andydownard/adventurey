@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
+import { sound } from '../audio/sound';
 import { COPY } from '../data/copy';
-import { MONSTERS, WORLD } from '../game/config';
+import { MONSTERS, SWORD, WORLD } from '../game/config';
 import { createNight, nightRewards, stepNight, type Input, type Loadout, type MonsterSize, type NightEvent, type NightState } from '../game/night';
 import type { Controls, Hud } from '../ui/hud';
 
@@ -16,8 +17,18 @@ export interface PlayInit {
 
 const STEP = 1 / 60;
 const AMBIENT_NIGHT = 0x4a5384;
-const PET_SCALE = { dragon: 0.44, wolf: 0.42, owl: 0.36 } as const;
-const PET_TEX = { dragon: 'pet-dragon', wolf: 'pet-wolf', owl: 'pet-owl' } as const;
+// Walk-cycle sprite sheets (4 frames each). Hero and pack mates are drawn facing left; pets face right.
+const SHEETS = {
+  hero: { file: 'hero-walk.png', w: 135, h: 258, fps: 9, scale: 0.46, facesLeft: true },
+  staff: { file: 'ally1-walk.png', w: 152, h: 248, fps: 8, scale: 0.43, facesLeft: true },
+  shield: { file: 'ally2-walk.png', w: 123, h: 258, fps: 8, scale: 0.44, facesLeft: true },
+  dragon: { file: 'dragon-walk.png', w: 215, h: 178, fps: 10, scale: 0.42, facesLeft: false },
+  wolf: { file: 'pup-walk.png', w: 142, h: 168, fps: 11, scale: 0.42, facesLeft: false },
+  owl: { file: 'owl-walk.png', w: 211, h: 198, fps: 8, scale: 0.36, facesLeft: false },
+} as const;
+type SheetKey = keyof typeof SHEETS;
+const SWING_SEC = 0.18;
+const SWORD_COOLDOWN = SWORD.cooldownSec;
 const MONSTER_TINT: Record<MonsterSize, number> = { small: 0xb4cdf0, normal: 0xc4bce0, big: 0xd0bcf0 };
 
 interface MonsterView { spr: Phaser.GameObjects.Image; shadow: Phaser.GameObjects.Image; glow: Phaser.GameObjects.Image; size: MonsterSize; seed: number }
@@ -31,9 +42,12 @@ export class PlayScene extends Phaser.Scene {
   private ending = false;
   private lit = false;
 
-  private hero!: Phaser.GameObjects.Image;
+  private hero!: Phaser.GameObjects.Sprite;
   private heroShadow!: Phaser.GameObjects.Image;
-  private pet!: Phaser.GameObjects.Image;
+  private pet!: Phaser.GameObjects.Sprite;
+  private sword!: Phaser.GameObjects.Image;
+  private allyViews: { spr: Phaser.GameObjects.Sprite; shadow: Phaser.GameObjects.Image }[] = [];
+  private lastPetPos = { x: 0, y: 0 };
   private petShadow!: Phaser.GameObjects.Image;
   private monsters = new Map<number, MonsterView>();
   private arrows = new Map<number, Phaser.GameObjects.Image>();
@@ -62,11 +76,8 @@ export class PlayScene extends Phaser.Scene {
 
   preload() {
     this.load.image('map', 'art/camp-map.jpg');
-    this.load.image('hero', 'art/sprite-hero.png');
     this.load.image('gloom', 'art/sprite-gloom.png');
-    this.load.image('pet-dragon', 'art/sprite-dragon.png');
-    this.load.image('pet-wolf', 'art/sprite-pup.png');
-    this.load.image('pet-owl', 'art/sprite-owl.png');
+    for (const [key, sh] of Object.entries(SHEETS)) this.load.spritesheet(`sheet-${key}`, `art/${sh.file}`, { frameWidth: sh.w, frameHeight: sh.h });
   }
 
   /** Small textures drawn once in code: soft light dots, shadows, the sword swoosh, arrows, the vignette. */
@@ -111,6 +122,18 @@ export class PlayScene extends Phaser.Scene {
       c.closePath();
       c.fill();
     });
+    canvas('sword', 26, 120, (c) => {
+      // Blade pointing up; the grip is at the bottom.
+      const blade = c.createLinearGradient(6, 0, 20, 0);
+      blade.addColorStop(0, '#9aa7c4');
+      blade.addColorStop(0.5, '#f4f8ff');
+      blade.addColorStop(1, '#8592b2');
+      c.fillStyle = blade;
+      c.beginPath(); c.moveTo(13, 0); c.lineTo(20, 12); c.lineTo(19, 86); c.lineTo(7, 86); c.lineTo(6, 12); c.closePath(); c.fill();
+      c.fillStyle = '#c9a24a'; c.fillRect(0, 86, 26, 7);
+      c.fillStyle = '#5a3b2a'; c.fillRect(9, 93, 8, 20);
+      c.fillStyle = '#c9a24a'; c.beginPath(); c.arc(13, 115, 4, 0, Math.PI * 2); c.fill();
+    });
     canvas('arrow', 64, 12, (c) => {
       c.fillStyle = '#c9a26a';
       c.fillRect(6, 5, 46, 2);
@@ -130,6 +153,12 @@ export class PlayScene extends Phaser.Scene {
 
   create() {
     this.makeTextures();
+    for (const [key, sh] of Object.entries(SHEETS)) {
+      if (this.anims.exists(`walk-${key}`)) continue;
+      // The owl's first frame faces the other way, so its flap uses frames 1, 2, 3, 2.
+      const frames = key === 'owl' ? [1, 2, 3, 2] : [0, 1, 2, 3];
+      this.anims.create({ key: `walk-${key}`, frames: this.anims.generateFrameNumbers(`sheet-${key}`, { frames }), frameRate: sh.fps, repeat: -1 });
+    }
     this.lit = this.renderer.type === Phaser.WEBGL;
     const lit = <T extends Phaser.GameObjects.Image>(o: T): T => (this.lit ? (o.setPipeline('Light2D') as T) : o);
 
@@ -178,11 +207,20 @@ export class PlayScene extends Phaser.Scene {
     };
 
     // Hero and pet, each with a soft shadow on the ground.
+    const sheetSprite = (key: SheetKey, x: number, y: number) =>
+      lit(this.add.sprite(x, y, `sheet-${key}`, 0).setOrigin(0.5, 0.97).setScale(SHEETS[key].scale));
     this.heroShadow = this.add.image(0, 0, 'shadow').setScale(0.62, 0.7).setAlpha(0.7);
-    this.hero = lit(this.add.image(this.s.hero.pos.x, this.s.hero.pos.y, 'hero').setOrigin(0.5, 0.94).setScale(0.46));
+    this.hero = sheetSprite('hero', this.s.hero.pos.x, this.s.hero.pos.y);
+    this.sword = lit(this.add.image(0, 0, 'sword').setOrigin(0.5, 0.86).setScale(0.62));
     const petKind = this.cfg.loadout.pet;
     this.petShadow = this.add.image(0, 0, 'shadow').setScale(0.6, 0.6).setAlpha(0.6);
-    this.pet = lit(this.add.image(this.s.pet.pos.x, this.s.pet.pos.y, PET_TEX[petKind]).setOrigin(0.5, 0.92).setScale(PET_SCALE[petKind]));
+    this.pet = sheetSprite(petKind, this.s.pet.pos.x, this.s.pet.pos.y);
+    if (petKind === 'owl') this.pet.setOrigin(0.5, 0.5).play('walk-owl');
+    this.lastPetPos = { ...this.s.pet.pos };
+    this.allyViews = this.s.allies.map((a) => ({
+      shadow: this.add.image(a.pos.x, a.pos.y, 'shadow').setScale(0.58, 0.66).setAlpha(0.65),
+      spr: sheetSprite(a.kind, a.pos.x, a.pos.y),
+    }));
 
     this.add.image(0, 0, 'vignette').setOrigin(0, 0).setScrollFactor(0).setDepth(100000);
 
@@ -204,14 +242,24 @@ export class PlayScene extends Phaser.Scene {
     this.cfg.hud.update(this.s);
   }
 
-  begin() { this.running = true; }
+  begin() {
+    this.running = true;
+    sound.startAmbient();
+  }
 
   /** For automated checks only: run the night forward quickly with a simple input. */
   advance(seconds: number, input: Input = { move: { x: 0, y: 0 }, swing: false, shoot: null }) {
     for (let i = 0; i < Math.round(seconds / STEP) && !this.ending; i++) this.handle(stepNight(this.s, STEP, input));
     this.cfg.hud.update(this.s);
   }
-  setPaused(p: boolean) { this.paused = p; }
+  setPaused(p: boolean) {
+    this.paused = p;
+    sound.pause(p);
+  }
+
+  shutdownSound() {
+    sound.stopAmbient();
+  }
 
   private readInput(): Input {
     const k = this.keys;
@@ -228,7 +276,9 @@ export class PlayScene extends Phaser.Scene {
       const f = this.s.hero.facing;
       shoot = { x: this.s.hero.pos.x + f.x * 300, y: this.s.hero.pos.y - 30 + f.y * 300 };
     }
-    return { move: { x, y }, swing: k.SPACE.isDown || k.J.isDown || this.cfg.controls.swing, shoot };
+    const tapped = !!this.cfg.controls.swingTap;
+    this.cfg.controls.swingTap = false;
+    return { move: { x, y }, swing: k.SPACE.isDown || k.J.isDown || this.cfg.controls.swing || tapped, shoot };
   }
 
   update(time: number, delta: number) {
@@ -275,13 +325,18 @@ export class PlayScene extends Phaser.Scene {
           this.tweens.add({ targets: shadow, alpha: 0.75, duration: 500 });
           this.tweens.add({ targets: glow, alpha: 0.95, duration: 500 });
           this.monsters.set(e.id, { spr, shadow, glow, size: e.size, seed: e.id * 1.7 });
+          if (Math.hypot(e.at.x - this.s.hero.pos.x, e.at.y - this.s.hero.pos.y) < 700) sound.play('spawn');
           break;
         }
+        case 'shoot':
+          sound.play(this.cfg.loadout.ranged === 'crossbow' ? 'crossbow' : 'bow');
+          break;
         case 'swing': {
+          sound.play('swing');
           const ang = Math.atan2(e.dir.y, e.dir.x);
           const sl = this.add.image(e.at.x + e.dir.x * 50, e.at.y - 34 + e.dir.y * 40, 'slash').setRotation(ang)
-            .setBlendMode(Phaser.BlendModes.ADD).setScale(0.7).setDepth(e.at.y + 40);
-          this.tweens.add({ targets: sl, scale: 1.15, alpha: 0, duration: 220, ease: 'Quad.easeOut', onComplete: () => sl.destroy() });
+            .setBlendMode(Phaser.BlendModes.ADD).setScale(0.8).setDepth(e.at.y + 40);
+          this.tweens.add({ targets: sl, scale: 1.35, alpha: 0, duration: 260, ease: 'Quad.easeOut', onComplete: () => sl.destroy() });
           this.tweens.add({ targets: this.hero, angle: { from: -8 * Math.sign(e.dir.x || 1), to: 0 }, duration: 180 });
           break;
         }
@@ -293,12 +348,14 @@ export class PlayScene extends Phaser.Scene {
             this.tweens.add({ targets: hv.spr, scaleX: sc * 1.25, scaleY: sc * 0.78, duration: 70, yoyo: true, onComplete: () => hv.spr.setScale(sc) });
           }
           if (e.by === 'sword') this.floatText(e.at.x, e.at.y - 80, COPY.bonk, '#b6f5c8', 24);
+          sound.play(e.by === 'sword' ? 'bonk' : 'hit');
           break;
         }
         case 'poof': {
           const v = this.monsters.get(e.id);
           const n = e.size === 'big' ? 40 : e.size === 'small' ? 14 : 24;
           this.fx.poof.explode(n, e.at.x, e.at.y - 30);
+          sound.play(e.size === 'big' ? 'bigPoof' : 'poof');
           this.flash(e.at.x, e.at.y - 30, 0xc9b8f2, 110, 0.8);
           if (e.size === 'big') this.floatText(e.at.x, e.at.y - 110, COPY.poof, '#c9b8f2', 30);
           if (v) {
@@ -310,6 +367,7 @@ export class PlayScene extends Phaser.Scene {
         case 'snack': {
           const v = this.monsters.get(e.id);
           this.fx.snack.explode(20, e.at.x, e.at.y - 20);
+          sound.play('snack');
           this.floatText(WORLD.fire.x, WORLD.fire.y - 90, COPY.snack, '#ffd9b0', 24);
           this.cameras.main.shake(140, 0.004);
           this.cfg.hud.flashCamp();
@@ -323,10 +381,25 @@ export class PlayScene extends Phaser.Scene {
         }
         case 'dizzy': {
           this.floatText(e.at.x, e.at.y - 130, COPY.dizzy, '#ffe08a', 24);
+          sound.play('dizzy');
           this.cameras.main.shake(100, 0.003);
           break;
         }
+        case 'allyAttack': {
+          sound.play(e.kind === 'staff' ? 'staff' : 'bonk');
+          if (e.kind === 'staff') {
+            for (let i = 1; i <= 8; i++) {
+              const k = i / 8;
+              this.time.delayedCall(i * 22, () => this.fx.spark.explode(2, e.from.x + (e.to.x - e.from.x) * k, e.from.y - 70 + (e.to.y - 30 - (e.from.y - 70)) * k));
+            }
+            this.flash(e.to.x, e.to.y - 30, 0x7fc8ff, 110, 0.9);
+          } else {
+            this.fx.dust.explode(8, e.to.x, e.to.y);
+          }
+          break;
+        }
         case 'petAttack': {
+          sound.play(e.kind === 'dragon' ? 'frost' : e.kind === 'wolf' ? 'yip' : 'hoot');
           if (e.kind === 'dragon') {
             for (let i = 1; i <= 10; i++) {
               const k = i / 10;
@@ -354,6 +427,8 @@ export class PlayScene extends Phaser.Scene {
 
   private finish(saved: boolean) {
     this.ending = true;
+    sound.stopAmbient();
+    sound.play(saved ? 'sunrise' : 'campFell');
     const r = nightRewards(this.s);
     const done = () => this.cfg.onEnd({ saved, bonks: this.s.bonks, crystals: r.crystals, dragonPower: r.dragonPower });
     if (saved && this.lit) {
@@ -374,13 +449,33 @@ export class PlayScene extends Phaser.Scene {
     }
   }
 
+  private animate(spr: Phaser.GameObjects.Sprite, key: SheetKey, moving: boolean) {
+    if (moving) spr.play(`walk-${key}`, true);
+    else if (spr.anims.isPlaying) {
+      spr.anims.stop();
+      spr.setFrame(0);
+    }
+  }
+
   private syncViews(t: number) {
     const s = this.s;
     const h = s.hero;
-    const bob = h.moving ? Math.abs(Math.sin(t * 12)) * 5 : Math.sin(t * 2) * 1.2;
-    this.hero.setPosition(h.pos.x, h.pos.y - bob).setDepth(h.pos.y);
-    if (Math.abs(h.facing.x) > 0.15) this.hero.setFlipX(h.facing.x < 0);
+    const breathe = h.moving ? 0 : Math.sin(t * 2) * 1.2;
+    this.hero.setPosition(h.pos.x, h.pos.y - breathe).setDepth(h.pos.y);
+    this.animate(this.hero, 'hero', h.moving);
+    if (Math.abs(h.facing.x) > 0.15) this.hero.setFlipX(h.facing.x > 0);
     this.hero.setRotation(h.dizzy > 0 ? Math.sin(t * 24) * 0.12 : this.hero.rotation * 0.8);
+
+    // The sword: held low and forward, then a big sweep when the hero swings.
+    const side = this.hero.flipX ? 1 : -1;
+    const since = SWORD_COOLDOWN - h.swordCd;
+    let ang = 140;
+    if (h.swordCd > 0 && since < SWING_SEC) {
+      const k = Phaser.Math.Easing.Cubic.Out(since / SWING_SEC);
+      ang = -75 + (150 + 75) * k;
+    }
+    this.sword.setPosition(h.pos.x + side * 20, h.pos.y - 50 - breathe).setAngle(ang * side).setDepth(h.pos.y + (h.facing.y < -0.5 ? -1 : 1));
+    this.sword.setFlipX(side < 0);
     this.heroShadow.setPosition(h.pos.x, h.pos.y - 2).setDepth(h.pos.y - 1);
     if (this.heroLight) this.heroLight.setPosition(h.pos.x, h.pos.y - 40);
 
@@ -395,9 +490,21 @@ export class PlayScene extends Phaser.Scene {
     const p = s.pet;
     const flying = p.kind === 'owl';
     const lift = flying ? 70 + Math.sin(t * 3) * 8 : 0;
-    this.pet.setPosition(p.pos.x, p.pos.y - lift - (flying ? 0 : Math.abs(Math.sin(t * 9)) * 2)).setDepth(p.pos.y + (flying ? 200 : 0));
+    this.pet.setPosition(p.pos.x, p.pos.y - lift).setDepth(p.pos.y + (flying ? 200 : 0));
     this.pet.setFlipX(p.facing < 0);
-    if (flying) this.pet.setScale(PET_SCALE.owl, PET_SCALE.owl * (0.92 + Math.abs(Math.sin(t * 8)) * 0.1));
+    if (!flying) {
+      const petMoving = Math.hypot(p.pos.x - this.lastPetPos.x, p.pos.y - this.lastPetPos.y) > 0.3;
+      this.animate(this.pet, p.kind, petMoving);
+    }
+    this.lastPetPos = { ...p.pos };
+
+    s.allies.forEach((a, i) => {
+      const v = this.allyViews[i];
+      if (!v) return;
+      v.spr.setPosition(a.pos.x, a.pos.y).setDepth(a.pos.y).setFlipX(a.facing > 0);
+      this.animate(v.spr, a.kind, a.moving);
+      v.shadow.setPosition(a.pos.x, a.pos.y - 2).setDepth(a.pos.y - 1);
+    });
     this.petShadow.setPosition(p.pos.x, p.pos.y).setDepth(p.pos.y - 1).setAlpha(flying ? 0.35 : 0.6);
 
     for (const m of s.monsters) {

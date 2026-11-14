@@ -10,6 +10,8 @@ export const COPY = {
   choosePack: 'Choose your pack',
   playFriends: 'Play with friends',
   comingSoon: 'Coming soon!',
+  comingSoonTag: 'Coming soon',
+  mute: 'Sound on or off',
   gearTitle: 'Choose your gear',
   gearSub: 'Pick a pet, a bow and a sword.',
   packTitle: 'Choose your pack',

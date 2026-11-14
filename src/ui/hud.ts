@@ -3,11 +3,14 @@ import { RANGED, SWORD } from '../game/config';
 import type { NightState } from '../game/night';
 import type { Vec } from '../game/world';
 import { h, ICONS, svgIcon } from './dom';
+import { muteButton } from './mute';
 
 /** Shared between the touch controls and the play scene. */
 export interface Controls {
   move: Vec;
   swing: boolean;
+  /** Set by a quick tap so a very short touch still swings once. */
+  swingTap?: boolean;
 }
 
 export interface Hud {
@@ -41,7 +44,7 @@ export function createHud(opts: { name: string; pack: 'wolf' | 'dragon'; ranged:
       h('div', { style: 'display:flex;align-items:center;gap:10px;font:800 22px Cinzel,serif' }, svgIcon(ICONS.moon, '#c9b8f2', 22), `Night ${opts.nightNumber}`),
       h('div', { style: 'display:flex;gap:6px;font-weight:800;font-size:16px;color:var(--lav)' }, timeText, COPY.hud.untilSunrise),
       h('div', { class: 'bar', style: 'width:260px;height:10px', role: 'progressbar', 'aria-label': 'Time until sunrise' }, timeFill)),
-    h('div', { style: 'display:flex;gap:12px;align-items:flex-start' }, campBox,
+    h('div', { style: 'display:flex;gap:12px;align-items:flex-start' }, campBox, muteButton('position:static'),
       h('button', { class: 'icon-btn', type: 'button', 'aria-label': COPY.hud.pause, style: 'position:static', onclick: opts.onPause }, svgIcon(ICONS.pause))));
 
   const bottom = h('div', { class: 'hud-bottom' },
@@ -74,7 +77,7 @@ export function createHud(opts: { name: string; pack: 'wolf' | 'dragon'; ranged:
     stick.addEventListener('pointerup', end);
     stick.addEventListener('pointercancel', end);
     const sword = h('button', { class: 'btn btn-main touch-sword', type: 'button' }, COPY.hud.sword);
-    sword.addEventListener('pointerdown', (e) => { e.preventDefault(); opts.controls.swing = true; });
+    sword.addEventListener('pointerdown', (e) => { e.preventDefault(); opts.controls.swing = true; opts.controls.swingTap = true; });
     const up = () => { opts.controls.swing = false; };
     sword.addEventListener('pointerup', up);
     sword.addEventListener('pointercancel', up);

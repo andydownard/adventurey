@@ -12,6 +12,9 @@
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; background: #02030a; overflow: hidden; }
+/* iPad: no double-tap zoom, no text selection or callouts while playing. */
+html, body, #stage { touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; overscroll-behavior: none; }
+input { -webkit-user-select: text; user-select: text; touch-action: manipulation; }
 body { font-family: Nunito, system-ui, sans-serif; color: var(--text); -webkit-tap-highlight-color: transparent; }
 [hidden] { display: none !important; }
 
@@ -122,3 +125,15 @@ h1, h2, .display { font-family: Cinzel, serif; font-weight: 800; margin: 0; }
 .reward { display: flex; flex-direction: column; align-items: center; gap: 6px; width: 190px; padding: 16px 12px; border-radius: 20px; background: rgba(10,14,38,.8); border: 2px solid rgba(201,184,242,.45); font-weight: 800; font-size: 18px; text-align: center; }
 .reward b { font: 800 34px Cinzel, serif; color: var(--green); }
 .result-actions { position: absolute; left: 0; right: 0; bottom: 40px; display: flex; justify-content: center; gap: 20px; }
+
+/* Coming soon */
+.soon { position: relative; opacity: .82; }
+.soon-tag { white-space: nowrap; position: absolute; top: -12px; right: -6px; padding: 3px 10px; border-radius: 999px; background: #ffd9b0; color: #2a1c22; font: 800 13px Nunito, sans-serif; letter-spacing: .3px; box-shadow: 0 2px 8px rgba(0,0,0,.35); }
+.circle.soon .soon-tag { top: auto; bottom: -10px; right: 50%; transform: translateX(50%); }
+
+/* Portrait on a touch screen: ask to turn the iPad sideways. */
+.rotate { display: none; }
+@media (orientation: portrait) and (pointer: coarse) {
+  .rotate { position: fixed; inset: 0; z-index: 10; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; background: #070b22; color: #f3f0ff; font: 800 28px Nunito, sans-serif; text-align: center; padding: 40px; }
+  .rotate svg { width: 96px; height: 96px; }
+}

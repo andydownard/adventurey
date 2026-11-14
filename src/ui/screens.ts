@@ -3,6 +3,7 @@ import { dragonStage, type Progress } from '../game/progress';
 import type { PackKind, PetKind, RangedKind } from '../game/night';
 import { REWARDS } from '../game/config';
 import { fireflies, h, ICONS, svgIcon } from './dom';
+import { muteButton } from './mute';
 
 export interface AppCtx {
   progress: Progress;
@@ -61,15 +62,18 @@ export function titleScreen(ctx: AppCtx): HTMLElement {
     h('div', { style: 'position:absolute;left:0;right:0;top:150px;display:flex;flex-direction:column;align-items:center;gap:14px' },
       h('h1', { class: 'title' }, COPY.title),
       h('p', { class: 'sub', style: 'font-size:24px;letter-spacing:1px' }, COPY.tagline)),
-    h('button', { class: 'circle', type: 'button', style: 'position:absolute;left:96px;top:56px', onclick: () => ctx.toast(COPY.comingSoon) }, COPY.playFriends),
+    h('button', { class: 'circle soon', type: 'button', style: 'position:absolute;left:96px;top:56px', 'aria-label': `${COPY.playFriends}. ${COPY.comingSoonTag}.`, onclick: () => ctx.toast(COPY.comingSoon) },
+      COPY.playFriends, h('span', { class: 'soon-tag' }, COPY.comingSoonTag)),
     moonWrap,
     h('nav', { 'aria-label': 'Main', style: 'position:absolute;left:0;right:0;top:420px;display:flex;flex-direction:column;align-items:center;gap:18px' },
       h('div', { style: 'display:flex;gap:18px' },
         h('button', { class: 'btn btn-main', type: 'button', style: 'width:300px', onclick: () => ctx.go('gear') }, svgIcon(ICONS.play, '#060914'), COPY.play),
-        h('button', { class: 'btn btn-glow', type: 'button', style: 'width:300px', onclick: () => ctx.toast(COPY.comingSoon) }, svgIcon(ICONS.compass, '#b6f5c8'), COPY.explore)),
+        h('button', { class: 'btn btn-glow soon', type: 'button', style: 'width:300px', 'aria-label': `${COPY.explore}. ${COPY.comingSoonTag}.`, onclick: () => ctx.toast(COPY.comingSoon) },
+          svgIcon(ICONS.compass, '#b6f5c8'), COPY.explore, h('span', { class: 'soon-tag' }, COPY.comingSoonTag))),
       h('div', { style: 'display:flex;gap:18px' },
         h('button', { class: 'btn btn-alt', type: 'button', style: 'width:280px', onclick: () => ctx.go('gear') }, svgIcon(ICONS.sword, '#b6f5c8'), COPY.chooseGear),
         h('button', { class: 'btn btn-alt', type: 'button', style: 'width:280px', onclick: () => ctx.go('pack') }, svgIcon(ICONS.paw, '#b6f5c8'), COPY.choosePack))),
+    muteButton('right:32px;bottom:26px'),
     h('div', { class: 'pill', style: 'position:absolute;left:50%;bottom:26px;transform:translateX(-50%);font-weight:800;font-size:18px' },
       `${COPY.nightsSaved}: ${p.nightsSaved}`, h('span', { style: 'opacity:.5' }, '·'),
       `${COPY.crystals}: ${p.crystals}`, h('span', { style: 'opacity:.5' }, '·'),

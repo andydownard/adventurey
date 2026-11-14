@@ -10,7 +10,7 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "lint": "tsc --noEmit && node scripts/copy-lint.mjs",
-    "smoke": "node scripts/smoke2.mjs"
+    "smoke": "node scripts/smoke2.mjs && node scripts/smoke-ipad.mjs"
   },
   "dependencies": {
     "@fontsource/cinzel": "5.3.0",

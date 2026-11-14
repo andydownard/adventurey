@@ -5,6 +5,7 @@ import '@fontsource/nunito/700.css';
 import '@fontsource/nunito/800.css';
 import './styles/ui.css';
 import Phaser from 'phaser';
+import { sound } from './audio/sound';
 import { COPY } from './data/copy';
 import { applyNightResult, loadProgress, saveProgress, type Progress } from './game/progress';
 import { PlayScene } from './scenes/PlayScene';
@@ -24,7 +25,10 @@ const store = safeStorage();
 const stage = document.getElementById('stage')!;
 const ui = document.getElementById('ui')!;
 const gameEl = document.getElementById('game')!;
-const isTouch = window.matchMedia('(pointer: coarse)').matches;
+const isTouch = window.matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoints > 0;
+
+// Sound may only start after a tap. iPad Safari counts touchend and click, so listen to all of them.
+for (const ev of ['pointerup', 'touchend', 'click', 'keydown']) window.addEventListener(ev, () => sound.unlock(), { capture: true, passive: true });
 
 // Fit the 1280 x 800 stage to any window, keeping its shape.
 function fit() {
@@ -65,6 +69,8 @@ const ctx: AppCtx = {
 };
 
 function stopGame() {
+  scene()?.shutdownSound();
+  sound.pause(false);
   if (game && game.scene.isActive('play')) game.scene.stop('play');
   gameEl.style.visibility = 'hidden';
 }
@@ -75,7 +81,8 @@ function scene(): PlayScene | null {
 
 function startNight() {
   const controls: Controls = { move: { x: 0, y: 0 }, swing: false };
-  const layer = h('div', { style: 'position:absolute;inset:0' });
+  // The layer lets taps and clicks reach the game; only its panels catch them.
+  const layer = h('div', { style: 'position:absolute;inset:0;pointer-events:none' });
   let pausedPanel: HTMLElement | null = null;
 
   const togglePause = () => {
@@ -88,7 +95,7 @@ function startNight() {
       return;
     }
     sc.setPaused(true);
-    pausedPanel = h('div', { class: 'overlay', role: 'dialog', 'aria-label': COPY.paused },
+    pausedPanel = h('div', { class: 'overlay', style: 'pointer-events:auto', role: 'dialog', 'aria-label': COPY.paused },
       h('div', { class: 'panel' },
         h('h2', {}, COPY.paused),
         h('div', { style: 'display:flex;gap:16px' },
@@ -101,7 +108,7 @@ function startNight() {
   const hud = createHud({ name: progress.name, pack: progress.pack, ranged: progress.ranged, nightNumber, controls, touch: isTouch, onPause: togglePause });
   layer.append(hud.el);
 
-  const intro = h('div', { class: 'overlay', role: 'dialog', 'aria-label': `Night ${nightNumber}` },
+  const intro = h('div', { class: 'overlay', style: 'pointer-events:auto', role: 'dialog', 'aria-label': `Night ${nightNumber}` },
     h('div', { class: 'panel' },
       h('h2', {}, `Night ${nightNumber}`),
       h('p', {}, 'Monsters come out of the woods and try to steal snacks from the campfire. Keep them away until sunrise!'),
@@ -157,6 +164,7 @@ function startNight() {
   }
   fit();
 }
+
 
 // Expose a tiny hook for automated checks (not used by players).
 (window as unknown as { __adventurey?: unknown }).__adventurey = { scene, get progress() { return progress; } };
