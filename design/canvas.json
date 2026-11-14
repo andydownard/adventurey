@@ -1,0 +1,127 @@
+{
+  "v": 3,
+  "attachments": {},
+  "boards": {
+    "Main.dc.html": {
+      "h": 800,
+      "is_interactive": true,
+      "title": "Forest start",
+      "w": 1280,
+      "x": 0,
+      "y": 0
+    },
+    "Gear.dc.html": {
+      "h": 800,
+      "is_interactive": true,
+      "title": "Choose your gear",
+      "w": 1280,
+      "x": 1360,
+      "y": 0
+    },
+    "Pack.dc.html": {
+      "h": 800,
+      "is_interactive": true,
+      "title": "Choose your pack",
+      "w": 1280,
+      "x": 2720,
+      "y": 0
+    },
+    "Campsite.dc.html": {
+      "h": 800,
+      "title": "Pack campsite at night",
+      "w": 1280,
+      "x": 4080,
+      "y": 0
+    },
+    "Sunrise.dc.html": {
+      "h": 800,
+      "is_interactive": true,
+      "title": "You saved the camp",
+      "w": 1280,
+      "x": 5440,
+      "y": 0
+    },
+    "DragonEvolve.dc.html": {
+      "h": 800,
+      "is_interactive": true,
+      "title": "Dragon evolving",
+      "w": 1280,
+      "x": 1360,
+      "y": 1240
+    },
+    "MakeDragon.dc.html": {
+      "h": 800,
+      "is_interactive": true,
+      "title": "Make your dragon",
+      "w": 1280,
+      "x": 2720,
+      "y": 1240
+    },
+    "Explore.dc.html": {
+      "h": 800,
+      "is_interactive": true,
+      "title": "Explore",
+      "w": 1280,
+      "x": 4080,
+      "y": 1240
+    }
+  },
+  "createdOnFiles": {
+    "at": "2026-11-14T02:40:00Z",
+    "v": 1
+  },
+  "designSystems": [],
+  "launch": {
+    "view": "canvas"
+  },
+  "noteOrder": [
+    "title",
+    "dragons",
+    "art",
+    "explore"
+  ],
+  "notes": {
+    "art": {
+      "fill": "purple",
+      "size": 24,
+      "text": "These screens set the mood, colors and layout. The real game will swap the drawn trees, dragons and monsters for realistic 3D models.",
+      "w": 560,
+      "x": 0,
+      "y": 880
+    },
+    "title": {
+      "kind": "title1",
+      "maxW": 6720,
+      "text": "Adventure-y: the game, start to sunrise",
+      "w": 240,
+      "x": 0,
+      "y": -260
+    },
+    "dragons": {
+      "kind": "title1",
+      "maxW": 2640,
+      "text": "Your dragon",
+      "x": 1360,
+      "y": 1000
+    },
+    "explore": {
+      "kind": "title1",
+      "maxW": 1280,
+      "text": "Explore",
+      "x": 4080,
+      "y": 1000
+    }
+  },
+  "order": [
+    "Main.dc.html",
+    "Gear.dc.html",
+    "Pack.dc.html",
+    "Campsite.dc.html",
+    "Sunrise.dc.html",
+    "DragonEvolve.dc.html",
+    "MakeDragon.dc.html",
+    "Explore.dc.html"
+  ],
+  "pages": [],
+  "title": "Adventure-y"
+}
