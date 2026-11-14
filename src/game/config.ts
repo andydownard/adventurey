@@ -88,6 +88,19 @@ export const PETS = {
   followDistance: 70,
 } as const;
 
+// Pack mates guard the campfire. They help, but only a little: the hero is the main fighter.
+export const ALLIES = {
+  posts: [
+    { x: 700, y: 560 },
+    { x: 860, y: 380 },
+  ],
+  kinds: ['staff', 'shield'] as const,
+  guardRadius: 300, // how far from the fire they go to meet a monster
+  speed: 150,
+  staff: { range: 230, everySec: 2.2, damage: 1 }, // a small magic bolt
+  shield: { range: 46, everySec: 1.8, damage: 1 }, // a bonk with the club
+} as const;
+
 export const REWARDS = {
   crystalsPerBonks: 3, // one crystal for every 3 monsters sent home
   dragonPowerPerNight: 1,

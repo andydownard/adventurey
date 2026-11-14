@@ -1,4 +1,4 @@
-import { HERO, MONSTERS, NIGHT, PETS, RANGED, REWARDS, SWORD, WORLD } from './config';
+import { ALLIES, HERO, MONSTERS, NIGHT, PETS, RANGED, REWARDS, SWORD, WORLD } from './config';
 import { makeRng, pick, type Rng } from './rng';
 import { dist, moveHero, norm, type Vec } from './world';
 
@@ -50,6 +50,17 @@ export interface Pet {
   facing: number; // 1 right, -1 left
 }
 
+export type AllyKind = (typeof ALLIES.kinds)[number];
+
+export interface Ally {
+  kind: AllyKind;
+  pos: Vec;
+  post: Vec;
+  cd: number;
+  facing: number;
+  moving: boolean;
+}
+
 export interface Input {
   /** Joystick or keys, each axis from -1 to 1. */
   move: Vec;
@@ -64,11 +75,12 @@ export type NightEvent =
   | { type: 'swing'; at: Vec; dir: Vec }
   | { type: 'shoot'; at: Vec; dir: Vec }
   | { type: 'spawn'; id: number; at: Vec; size: MonsterSize }
-  | { type: 'hit'; id: number; at: Vec; by: 'sword' | 'arrow' | 'pet' }
+  | { type: 'hit'; id: number; at: Vec; by: 'sword' | 'arrow' | 'pet' | 'ally' }
   | { type: 'poof'; id: number; at: Vec; size: MonsterSize }
   | { type: 'snack'; id: number; at: Vec; campHealth: number }
   | { type: 'dizzy'; at: Vec }
   | { type: 'petAttack'; kind: PetKind; from: Vec; to: Vec }
+  | { type: 'allyAttack'; kind: AllyKind; from: Vec; to: Vec }
   | { type: 'arrowGone'; id: number }
   | { type: 'sunrise' }
   | { type: 'campFell' };
@@ -80,6 +92,7 @@ export interface NightState {
   maxCampHealth: number;
   hero: Hero;
   pet: Pet;
+  allies: Ally[];
   monsters: Monster[];
   arrows: Arrow[];
   nextSpawn: number;
@@ -101,6 +114,7 @@ export function createNight(loadout: Loadout, seed = 1, nightNumber = 1): NightS
     maxCampHealth: NIGHT.campHealth,
     hero: { pos: { ...WORLD.heroStart }, facing: { x: 1, y: 0 }, dizzy: 0, swordCd: 0, shotCd: 0, moving: false },
     pet: { kind: loadout.pet, pos: { x: WORLD.heroStart.x - 60, y: WORLD.heroStart.y + 10 }, cd: 1, orbit: 0, facing: 1 },
+    allies: ALLIES.posts.map((p, i) => ({ kind: ALLIES.kinds[i % ALLIES.kinds.length], pos: { ...p }, post: { ...p }, cd: 1 + i * 0.7, facing: 1, moving: false })),
     monsters: [],
     arrows: [],
     nextSpawn: 2,
@@ -124,7 +138,7 @@ function heroSpeed(s: NightState) {
   return s.loadout.pack === 'wolf' ? HERO.wolfPackSpeed : HERO.speed;
 }
 
-function damage(s: NightState, m: Monster, amount: number, by: 'sword' | 'arrow' | 'pet', ev: NightEvent[]) {
+function damage(s: NightState, m: Monster, amount: number, by: 'sword' | 'arrow' | 'pet' | 'ally', ev: NightEvent[]) {
   m.hp -= amount;
   m.hitFlash = 0.15;
   ev.push({ type: 'hit', id: m.id, at: { ...m.pos }, by });
@@ -236,6 +250,37 @@ function stepPet(s: NightState, dt: number, ev: NightEvent[]) {
   if (Math.abs(pet.pos.x - oldX) > 0.5) pet.facing = pet.pos.x > oldX ? 1 : -1;
 }
 
+function stepAllies(s: NightState, dt: number, ev: NightEvent[]) {
+  const fire = WORLD.fire;
+  for (const a of s.allies) {
+    a.cd -= dt;
+    const st = ALLIES[a.kind];
+    // Only monsters that come close to camp are worth leaving the post for.
+    const near = s.monsters.filter((m) => dist(m.pos, fire) <= ALLIES.guardRadius);
+    let target: Monster | null = null;
+    let best = Infinity;
+    for (const m of near) {
+      const d = dist(a.pos, m.pos);
+      if (d < best) { best = d; target = m; }
+    }
+    const old = { ...a.pos };
+    if (target) {
+      const reach = st.range + MONSTERS[target.size].radius;
+      if (best > reach) a.pos = moveToward(a.pos, target.pos, ALLIES.speed * dt);
+      else if (a.cd <= 0) {
+        a.cd = st.everySec;
+        a.facing = target.pos.x >= a.pos.x ? 1 : -1;
+        ev.push({ type: 'allyAttack', kind: a.kind, from: { ...a.pos }, to: { ...target.pos } });
+        damage(s, target, st.damage, 'ally', ev);
+      }
+    } else if (dist(a.pos, a.post) > 4) {
+      a.pos = moveToward(a.pos, a.post, ALLIES.speed * 0.7 * dt);
+    }
+    a.moving = dist(old, a.pos) > 0.01;
+    if (Math.abs(a.pos.x - old.x) > 0.01) a.facing = a.pos.x > old.x ? 1 : -1;
+  }
+}
+
 export function stepNight(s: NightState, dt: number, input: Input): NightEvent[] {
   const ev: NightEvent[] = [];
   if (s.outcome !== 'playing') return ev;
@@ -328,6 +373,7 @@ export function stepNight(s: NightState, dt: number, input: Input): NightEvent[]
   }
 
   stepPet(s, dt, ev);
+  stepAllies(s, dt, ev);
 
   if (s.campHealth <= 0) {
     s.outcome = 'campFell';

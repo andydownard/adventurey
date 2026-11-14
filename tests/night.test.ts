@@ -198,3 +198,33 @@ describe('nights get harder', () => {
     expect(twenty).toBe(NIGHT.fastestScale);
   });
 });
+
+describe('pack mates', () => {
+  it('start at their posts by the fire', () => {
+    const s = quiet();
+    expect(s.allies).toHaveLength(2);
+    for (const a of s.allies) expect(Math.hypot(a.pos.x - WORLD.fire.x, a.pos.y - WORLD.fire.y)).toBeLessThan(250);
+  });
+  it('send a monster near camp home, even when the hero is away', () => {
+    const s = quiet();
+    s.hero.pos = { x: 768, y: 980 };
+    monster(s, WORLD.fire.x - 160, WORLD.fire.y + 60, 'small');
+    let attacked = false;
+    for (let i = 0; i < 200 && !attacked; i++) attacked = stepNight(s, 0.05, idle).some((e) => e.type === 'allyAttack');
+    expect(attacked).toBe(true);
+    expect(s.bonks).toBe(1);
+  });
+  it('ignore monsters far from camp', () => {
+    const s = quiet();
+    monster(s, 60, 60, 'big').pos = { x: 60, y: 60 };
+    const ev = stepNight(s, 0.05, idle);
+    expect(ev.some((e) => e.type === 'allyAttack')).toBe(false);
+  });
+  it('only help a little: an empty camp still falls on a busy night', () => {
+    const s = createNight({ ...loadout }, 5, 4);
+    s.pet.cd = 1e9;
+    s.hero.pos = { x: 768, y: 1000 };
+    for (let i = 0; i < 3000 && s.outcome === 'playing'; i++) stepNight(s, 0.05, idle);
+    expect(s.outcome).toBe('campFell');
+  });
+});
