@@ -20,8 +20,15 @@ TypeScript · Vite · Phaser 3.90 (WebGL with Light2D lighting) · plain DOM and
 ## Commands
 test: `npm test` · lint: `npm run lint` (types + banned-word check) · typecheck: `npm run typecheck` · build: `npm run build` · run: `npm run dev` · browser smoke: `npm run smoke` (with `npx vite preview --port 4173` running)
 
-## Current state (2026-11-13)
-Phase 1 is built: start screen (moon name, Play, Choose your gear, Choose your pack; Explore and Play with friends say "Coming soon"), gear and pack pickers, one night of camp defense, sunrise and try-again screens, saved progress. Nights get harder each time. Rules live in `src/game/` with no Phaser imports; every balance number is in `src/game/config.ts`. Playable copy: https://claude.ai/artifact/WYth2gUXe3xxJTWkTUntL5
+## Current state (2026-11-14)
+Phase 1 is built and online at https://andydownard.github.io/adventurey/ (GitHub Pages; `.github/workflows/pages.yml` rebuilds on every push to main).
+- Start screen: moon name, Play, Choose your gear, Choose your pack, sound on/off. Explore and Play with friends carry a "Coming soon" tag.
+- One night of camp defense with walking sprites for the hero, pet, and two pack mates (staff and shield). Pack mates guard the fire but only help a little; the hero is the main fighter.
+- The sword is its own sprite and sweeps on Space or the Sword button.
+- Sound is made in code (`src/audio/sound.ts`, no files). It starts only after a tap or key press. The mute choice is saved.
+- iPad: joystick and Sword button, tap the field to shoot, no zoom or text selection, and a "turn sideways" message in portrait. Checked by `scripts/smoke-ipad.mjs`.
+- Rules live in `src/game/` with no Phaser imports; every balance number is in `src/game/config.ts`.
+- Next: open world at night (snow land, forest, cave area, mountain range) while the pack guards camp.
 
 ## Vocabulary
 | User sees | Code uses | NEVER say in UI |
@@ -44,6 +51,8 @@ To be written.
 ## Regressions
 | # | What broke | Rule/test that prevents it |
 |---|---|---|
+| 1 | The night's overlay layer covered the game, so taps and clicks on the field did nothing | Layer uses `pointer-events:none`; `smoke-ipad.mjs` checks a tap shoots |
+| 2 | Space swung in the rules but nothing moved on screen | Separate sword sprite; `smoke-ipad.mjs` checks the sweep is seen |
 
 ## Doc index
 | Topic | File |
