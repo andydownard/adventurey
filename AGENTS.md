@@ -21,7 +21,7 @@ TypeScript · Vite · Phaser 3.90 (WebGL with Light2D lighting) · plain DOM and
 test: `npm test` · lint: `npm run lint` (types + banned-word check) · typecheck: `npm run typecheck` · build: `npm run build` · run: `npm run dev` · browser smoke: `npm run smoke` (with `npx vite preview --port 4173` running)
 
 ## Current state (2026-11-14)
-Phase 1 is built and online at https://andydownard.github.io/adventurey/ (GitHub Pages; `.github/workflows/pages.yml` rebuilds on every push to main).
+Phase 1 is built. It is hosted on Railway, which rebuilds from `main` on every push (`railway.json`: `npm run build`, then `npm start` serves `dist/`). Do not host it on GitHub Pages.
 - Start screen: moon name, Play, Choose your gear, Choose your pack, sound on/off. Explore and Play with friends carry a "Coming soon" tag.
 - One night of camp defense with walking sprites for the hero, pet, and two pack mates (staff and shield). Pack mates guard the fire but only help a little; the hero is the main fighter.
 - The sword is its own sprite and sweeps on Space or the Sword button.
