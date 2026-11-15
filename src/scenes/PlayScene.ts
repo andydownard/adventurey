@@ -31,6 +31,7 @@ const SHEETS = {
 } as const;
 type SheetKey = keyof typeof SHEETS;
 const SWING_SEC = 0.18;
+const QUEUE_SEC = 0.9; // a tap during reload still fires if the bow is ready within this long (game time)
 const SWORD_COOLDOWN = SWORD.cooldownSec;
 const MONSTER_TINT: Record<MonsterSize, number> = { small: 0xb4cdf0, normal: 0xc4bce0, big: 0xd0bcf0 };
 
@@ -59,6 +60,8 @@ export class PlayScene extends Phaser.Scene {
   private fx!: Record<'poof' | 'frost' | 'snack' | 'dust' | 'feather' | 'spark', Phaser.GameObjects.Particles.ParticleEmitter>;
   private keys!: Record<string, Phaser.Input.Keyboard.Key>;
   private queuedShot: { x: number; y: number } | null = null;
+  /** When the queued tap was made; a tap during reload waits this long, then fires. */
+  private queuedAt = 0;
   private dizzyText?: Phaser.GameObjects.Text;
   private gems = new Map<number, { spr: Phaser.GameObjects.Image; glow: Phaser.GameObjects.Image; seed: number }>();
   private staticLights = 0;
@@ -298,6 +301,8 @@ export class PlayScene extends Phaser.Scene {
     this.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
       const wp = cam.getWorldPoint(p.x, p.y);
       this.queuedShot = { x: wp.x, y: wp.y };
+      this.queuedAt = this.s.t;
+      this.markTap(wp.x, wp.y);
     });
 
     this.syncViews(0);
@@ -371,12 +376,20 @@ export class PlayScene extends Phaser.Scene {
       while (this.acc >= STEP && !this.ending) {
         this.acc -= STEP;
         const input = this.readInput();
-        this.queuedShot = null;
-        this.handle(stepNight(this.s, STEP, input));
+        const events = stepNight(this.s, STEP, input);
+        // Keep a tap made during reload until the shot goes out, so no tap is wasted.
+        if (events.some((e) => e.type === 'shoot') || this.s.t - this.queuedAt > QUEUE_SEC) this.queuedShot = null;
+        this.handle(events);
       }
       this.cfg.hud.update(this.s);
     }
     this.syncViews(t);
+  }
+
+  /** A little ring where the player tapped, so they see where the shot will go. */
+  private markTap(x: number, y: number) {
+    const ring = this.add.circle(x, y, 20).setStrokeStyle(4, 0xffd9b0, 0.95).setDepth(7500);
+    this.tweens.add({ targets: ring, scale: 1.6, alpha: 0, duration: 420, ease: 'Cubic.easeOut', onComplete: () => ring.destroy() });
   }
 
   private floatText(x: number, y: number, text: string, color = '#ffffff', size = 26) {

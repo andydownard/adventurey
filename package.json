@@ -10,7 +10,7 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "lint": "tsc --noEmit && node scripts/copy-lint.mjs",
-    "smoke": "node scripts/smoke2.mjs && node scripts/smoke-ipad.mjs && node scripts/smoke-world.mjs && node scripts/smoke-webkit.mjs",
+    "smoke": "node scripts/smoke2.mjs && node scripts/smoke-ipad.mjs && node scripts/smoke-world.mjs && node scripts/smoke-webkit.mjs && node scripts/smoke-crossbow.mjs",
     "start": "serve dist --single --no-clipboard --listen tcp://0.0.0.0:${PORT:-3000}"
   },
   "dependencies": {

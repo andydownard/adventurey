@@ -26,7 +26,7 @@ Phase 1 is built. It is hosted on Railway at https://adventurey.rallytasks.com (
 - A 2-minute night of camp defense with walking sprites for the hero, pet, and two pack mates (staff and shield). Pack mates guard the fire but only help a little; the hero is the main fighter.
 - The sword is its own sprite and sweeps on Space or the Sword button.
 - Sound is made in code (`src/audio/sound.ts`, no files). It starts only after a tap or key press. The mute choice is saved.
-- iPad: joystick and Sword button, tap the field to shoot, no zoom or text selection, and a "turn sideways" message in portrait. Safari ignores the page's no-zoom setting, so `src/main.ts` blocks pinch (gesture events) and double-tap zoom itself. Checked by `scripts/smoke-ipad.mjs` (Chrome) and `scripts/smoke-webkit.mjs` (Safari's engine; run `npx playwright install webkit` once).
+- iPad: joystick and Sword button, tap anywhere on the game to shoot the bow or crossbow there (a ring marks the tap; a tap during reload fires as soon as it is ready), no zoom or text selection, and a "turn sideways" message in portrait. Safari ignores the page's no-zoom setting, so `src/main.ts` blocks pinch (gesture events) and double-tap zoom itself. Checked by `scripts/smoke-ipad.mjs` (Chrome) and `scripts/smoke-webkit.mjs` (Safari's engine; run `npx playwright install webkit` once).
 - Rules live in `src/game/` with no Phaser imports; every balance number is in `src/game/config.ts`.
 - Open world: four painted areas join the camp at its trails: Snow Land (left), Crystal Caves (right), Mountain Range (top), Old Forest (bottom). The hero can walk out any time. Each area has crystals to pick up, wild monsters that roam and chase, its own glow and moonlight color, and a title banner on arrival. An arrow points back to camp.
 - Balance (2026-11-14, after "way too hard" and "too many monsters at once" on iPad): camp has 20 snacks; monsters are slower and come less often; only 4 may head for camp at once on night 1 (one more each night, up to 8); 2 wild monsters per area with a short chase range; a bigger, faster sword swing. While the hero is out, monsters reach camp 1.3x more slowly. An empty camp still loses snacks every night, more on later nights.
@@ -60,6 +60,7 @@ To be written.
 | 3 | Wild monsters waited at trail entrances, so a hero arriving got dizzy at once | Test "do not wait right at a trail entrance" in `tests/night.test.ts` |
 | 4 | On a real iPad, holding the joystick while tapping Sword (a pinch) or double-tapping zoomed the page; the game looked frozen, the joystick stopped working, and the hero slid off screen | Gesture and double-tap blocks in `src/main.ts`; `smoke-webkit.mjs` checks pinch is blocked and zoom stays 1 |
 | 5 | Blocking quick double-taps also swallowed fast taps on menu buttons | Buttons and the joystick are exempt; `smoke-ipad.mjs` taps through the menus quickly |
+| 6 | iPad crossbow: taps during reload were thrown away, the bottom Sword/Crossbow pictures blocked taps, and the intro said to tap a Shoot button that does not exist | Taps wait up to 0.9 s of game time for reload; only real controls catch taps in the display; `smoke-crossbow.mjs` (Safari engine) picks the crossbow and checks each tap shoots toward the spot |
 
 ## Doc index
 | Topic | File |

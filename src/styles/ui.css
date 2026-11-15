@@ -92,10 +92,10 @@ h1, h2, .display { font-family: Cinzel, serif; font-weight: 800; margin: 0; }
 
 /* HUD */
 .hud { position: absolute; inset: 0; pointer-events: none; }
-.hud > * { pointer-events: auto; }
+.hud > * { pointer-events: none; }
 .pill { display: flex; align-items: center; gap: 12px; padding: 8px 18px; border-radius: 999px; background: var(--panel); border: 2px solid rgba(201,184,242,.5); }
 .hud-top { position: absolute; left: 24px; right: 24px; top: 20px; display: flex; justify-content: space-between; align-items: flex-start; pointer-events: none; }
-.hud-top > * { pointer-events: auto; }
+.hud-top > * { pointer-events: none; }
 .badge { width: 40px; height: 40px; border-radius: 50%; background: var(--purple); display: flex; align-items: center; justify-content: center; }
 .badge img { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; }
 .bar { height: 16px; border-radius: 999px; background: rgba(201,184,242,.18); overflow: hidden; }
@@ -105,7 +105,9 @@ h1, h2, .display { font-family: Cinzel, serif; font-weight: 800; margin: 0; }
 @keyframes hurt { 30% { border-color: #ffb86b; box-shadow: 0 0 26px rgba(255,184,107,.7); } }
 .time-box { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px 24px; border-radius: 20px; background: var(--panel); border: 2px solid rgba(201,184,242,.5); min-width: 300px; }
 .hud-bottom { position: absolute; left: 24px; right: 24px; bottom: 20px; display: flex; justify-content: space-between; align-items: flex-end; pointer-events: none; }
-.hud-bottom > * { pointer-events: auto; }
+.hud-bottom > * { pointer-events: none; }
+/* Only real controls catch taps; everything else in the display lets taps through to shoot. */
+.hud button, .hud .stick, .hud input { pointer-events: auto; }
 .slot { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; width: 92px; height: 84px; border-radius: 18px;
   background: var(--panel); border: 2px solid rgba(201,184,242,.5); font-weight: 800; font-size: 15px; overflow: hidden; color: var(--text); padding: 0; }
 .slot img { width: 40px; height: 40px; object-fit: contain; }

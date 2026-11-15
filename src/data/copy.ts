@@ -56,7 +56,7 @@ export const COPY = {
     pause: 'Pause',
   },
   howTo: 'Move: WASD or arrow keys. Sword: Space. Shoot: click where you aim.',
-  howToTouch: 'Move with the left pad. Tap Sword or Shoot.',
+  howToTouch: 'Move with the left pad. Tap Sword to swing. Tap anywhere to shoot there.',
   start: 'Start the night',
   paused: 'Paused',
   resume: 'Keep playing',
