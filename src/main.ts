@@ -30,6 +30,21 @@ const isTouch = window.matchMedia('(pointer: coarse)').matches || navigator.maxT
 // Sound may only start after a tap. iPad Safari counts touchend and click, so listen to all of them.
 for (const ev of ['pointerup', 'touchend', 'click', 'keydown']) window.addEventListener(ev, () => sound.unlock(), { capture: true, passive: true });
 
+// iPad Safari ignores "no zoom" in the page settings. Holding the joystick while tapping Sword
+// looks like a pinch, and two quick taps look like a double-tap, so Safari zoomed the page and the
+// game seemed to freeze. Block both here.
+for (const ev of ['gesturestart', 'gesturechange', 'gestureend']) document.addEventListener(ev, (e) => e.preventDefault(), { passive: false });
+let lastTouchEnd = 0;
+document.addEventListener('touchend', (e) => {
+  // Buttons and the joystick are safe already (CSS touch-action), and kids tap them fast.
+  if ((e.target as Element | null)?.closest?.('button, a, input, .stick')) return;
+  const now = performance.now();
+  if (now - lastTouchEnd < 350 && e.cancelable) e.preventDefault();
+  lastTouchEnd = now;
+}, { passive: false });
+document.addEventListener('touchmove', (e) => { if (e.touches.length > 1 && e.cancelable) e.preventDefault(); }, { passive: false });
+document.addEventListener('dblclick', (e) => e.preventDefault(), { passive: false });
+
 // Fit the 1280 x 800 stage to any window, keeping its shape.
 function fit() {
   const s = Math.min(window.innerWidth / 1280, window.innerHeight / 800);

@@ -66,6 +66,10 @@ export class PlayScene extends Phaser.Scene {
   private ambientTween?: Phaser.Tweens.Tween;
   private campPointer!: Phaser.GameObjects.Container;
   private seenGuardNote = false;
+  /** -1 facing left, +1 facing right; it glides between them so the hero turns smoothly. */
+  private turn = -1;
+  private lastT = 0;
+  private padStartWas = false;
 
   constructor() {
     super('play');
@@ -324,19 +328,36 @@ export class PlayScene extends Phaser.Scene {
     let x = (k.D.isDown || k.RIGHT.isDown ? 1 : 0) - (k.A.isDown || k.LEFT.isDown ? 1 : 0);
     let y = (k.S.isDown || k.DOWN.isDown ? 1 : 0) - (k.W.isDown || k.UP.isDown ? 1 : 0);
     if (x === 0 && y === 0) ({ x, y } = this.cfg.controls.move);
+    // A game controller works too: left stick or pad to walk, A (or RB) to swing, X (or RT) to shoot.
+    const pad = navigator.getGamepads?.().find((g) => g && g.connected) ?? null;
+    let padSwing = false;
+    let padShoot = false;
+    if (pad) {
+      const ax = pad.axes[0] ?? 0;
+      const ay = pad.axes[1] ?? 0;
+      const btn = (i: number) => !!pad.buttons[i]?.pressed;
+      if (x === 0 && y === 0) {
+        if (Math.hypot(ax, ay) > 0.2) ({ x, y } = { x: ax, y: ay });
+        else ({ x, y } = { x: (btn(15) ? 1 : 0) - (btn(14) ? 1 : 0), y: (btn(13) ? 1 : 0) - (btn(12) ? 1 : 0) });
+      }
+      padSwing = btn(0) || btn(5);
+      padShoot = btn(2) || btn(7);
+      if (btn(9) && !this.padStartWas) this.cfg.onPauseKey();
+      this.padStartWas = btn(9);
+    }
     let shoot = this.queuedShot;
     const p = this.input.activePointer;
     if (!shoot && p.isDown && !p.wasTouch) {
       const wp = this.cameras.main.getWorldPoint(p.x, p.y);
       shoot = { x: wp.x, y: wp.y };
     }
-    if (!shoot && k.K.isDown) {
+    if (!shoot && (k.K.isDown || padShoot)) {
       const f = this.s.hero.facing;
       shoot = { x: this.s.hero.pos.x + f.x * 300, y: this.s.hero.pos.y - 30 + f.y * 300 };
     }
     const tapped = !!this.cfg.controls.swingTap;
     this.cfg.controls.swingTap = false;
-    return { move: { x, y }, swing: k.SPACE.isDown || k.J.isDown || this.cfg.controls.swing || tapped, shoot };
+    return { move: { x, y }, swing: k.SPACE.isDown || k.J.isDown || this.cfg.controls.swing || tapped || padSwing, shoot };
   }
 
   update(time: number, delta: number) {
@@ -589,20 +610,28 @@ export class PlayScene extends Phaser.Scene {
     const s = this.s;
     const h = s.hero;
     const breathe = h.moving ? 0 : Math.sin(t * 2) * 1.2;
+    const dt = Math.min(0.1, Math.max(0, t - this.lastT));
+    this.lastT = t;
     this.hero.setPosition(h.pos.x, h.pos.y - breathe).setDepth(h.pos.y);
     this.animate(this.hero, 'hero', h.moving);
-    if (Math.abs(h.facing.x) > 0.15) this.hero.setFlipX(h.facing.x > 0);
-    this.hero.setRotation(h.dizzy > 0 ? Math.sin(t * 24) * 0.12 : this.hero.rotation * 0.8);
+    // Turn smoothly toward where the hero is heading, like spinning around, instead of snapping.
+    const want = h.facing.x > 0.15 ? 1 : h.facing.x < -0.15 ? -1 : Math.sign(this.turn) || -1;
+    this.turn = Phaser.Math.Clamp(this.turn + Math.sign(want - this.turn) * Math.min(Math.abs(want - this.turn), dt * 9), -1, 1);
+    const shown = Math.sign(this.turn || want) * Math.max(0.18, Math.abs(this.turn));
+    this.hero.setFlipX(false).setScale(-SHEETS.hero.scale * shown, SHEETS.hero.scale);
+    // Lean a little into the walk; wobble when dizzy.
+    const lean = h.moving ? h.facing.x * 0.07 : 0;
+    this.hero.setRotation(h.dizzy > 0 ? Math.sin(t * 24) * 0.12 : Phaser.Math.Linear(this.hero.rotation, lean, 0.2));
 
     // The sword: held low and forward, then a big sweep when the hero swings.
-    const side = this.hero.flipX ? 1 : -1;
+    const side = this.turn >= 0 ? 1 : -1;
     const since = SWORD_COOLDOWN - h.swordCd;
     let ang = 140;
     if (h.swordCd > 0 && since < SWING_SEC) {
       const k = Phaser.Math.Easing.Cubic.Out(since / SWING_SEC);
       ang = -75 + (150 + 75) * k;
     }
-    this.sword.setPosition(h.pos.x + side * 20, h.pos.y - 50 - breathe).setAngle(ang * side).setDepth(h.pos.y + (h.facing.y < -0.5 ? -1 : 1));
+    this.sword.setPosition(h.pos.x + this.turn * 20, h.pos.y - 50 - breathe).setAngle(ang * side).setDepth(h.pos.y + (h.facing.y < -0.5 ? -1 : 1));
     this.sword.setFlipX(side < 0);
     this.heroShadow.setPosition(h.pos.x, h.pos.y - 2).setDepth(h.pos.y - 1);
     if (this.heroLight) this.heroLight.setPosition(h.pos.x, h.pos.y - 40);

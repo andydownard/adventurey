@@ -1,5 +1,5 @@
 import { CRYSTALS, HERO, MONSTERS, NIGHT, RANGED, REGIONS, REWARDS, SWORD, WILD, WORLD } from '../src/game/config';
-import { createNight, nightRewards, spawnInterval, stepNight, swordTargets, type Input, type Loadout, type Monster, type NightState } from '../src/game/night';
+import { maxRaiders, createNight, nightRewards, spawnInterval, stepNight, swordTargets, type Input, type Loadout, type Monster, type NightState } from '../src/game/night';
 import { makeRng } from '../src/game/rng';
 import type { Vec } from '../src/game/world';
 import { isWalkable, moveHero, regionAt, toWorld, worldBounds } from '../src/game/world';
@@ -159,12 +159,13 @@ describe('monsters', () => {
     expect(a.length).toBeGreaterThan(5);
     expect(run()).toEqual(a);
   });
-  it('a camp with nobody guarding it falls before sunrise', () => {
+  it('a camp with nobody guarding it loses snacks', () => {
     const s = createNight({ ...loadout }, 5);
     s.pet.cd = 1e9;
+    s.wild = [];
     s.hero.pos = { x: 768, y: 980 }; // standing far down the trail
-    for (let i = 0; i < 2000 && s.outcome === 'playing'; i++) stepNight(s, 0.05, idle);
-    expect(s.outcome).toBe('campFell');
+    for (let i = 0; i < 3000 && s.outcome === 'playing'; i++) stepNight(s, 0.05, idle);
+    expect(s.campHealth).toBeLessThan(s.maxCampHealth);
   });
 });
 
@@ -222,12 +223,17 @@ describe('pack mates', () => {
     const ev = stepNight(s, 0.05, idle);
     expect(ev.some((e) => e.type === 'allyAttack')).toBe(false);
   });
-  it('only help a little: an empty camp still falls on a busy night', () => {
-    const s = createNight({ ...loadout }, 5, 4);
-    s.pet.cd = 1e9;
-    s.hero.pos = { x: 768, y: 1000 };
-    for (let i = 0; i < 3000 && s.outcome === 'playing'; i++) stepNight(s, 0.05, idle);
-    expect(s.outcome).toBe('campFell');
+  it('only help a little: on a later night an empty camp loses many snacks', () => {
+    let lost = 0;
+    for (const seed of [1, 2, 3, 4]) {
+      const s = createNight({ ...loadout }, seed, 6);
+      s.pet.cd = 1e9;
+      s.wild = [];
+      s.hero.pos = { x: 768, y: 1000 };
+      for (let i = 0; i < 3000 && s.outcome === 'playing'; i++) stepNight(s, 0.05, idle);
+      lost += s.maxCampHealth - s.campHealth;
+    }
+    expect(lost / 4).toBeGreaterThanOrEqual(4);
   });
 });
 
@@ -351,6 +357,27 @@ describe('wild monsters', () => {
     expect(s.monsters.some((x) => x.wild)).toBe(false);
     walk(s, idle, 2);
     expect(s.monsters.some((x) => x.wild)).toBe(true);
+  });
+});
+
+describe('not too many monsters at once', () => {
+  it('only a few head for camp at the same time on night 1, a few more on later nights', () => {
+    expect(maxRaiders(1)).toBe(NIGHT.maxRaiders.first);
+    expect(maxRaiders(3)).toBeGreaterThan(maxRaiders(1));
+    expect(maxRaiders(50)).toBe(NIGHT.maxRaiders.most);
+    for (const night of [1, 5]) {
+      const s = createNight({ ...loadout }, 9, night);
+      s.wild = [];
+      s.pet.cd = 1e9;
+      s.allies = [];
+      s.hero.pos = { x: 768, y: 1000 }; // nobody sends them home, so they pile up
+      let most = 0;
+      for (let i = 0; i < 60 * 100 && s.outcome === 'playing'; i++) {
+        stepNight(s, 1 / 60, idle);
+        most = Math.max(most, s.monsters.length);
+      }
+      expect(most).toBeLessThanOrEqual(maxRaiders(night));
+    }
   });
 });
 

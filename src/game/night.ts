@@ -126,6 +126,7 @@ export interface NightState {
   wild: WildSlot[];
   /** Where the hero is right now. */
   region: RegionId;
+  nightNumber: number;
   outcome: Outcome;
   loadout: Loadout;
   rng: Rng;
@@ -151,6 +152,7 @@ export function createNight(loadout: Loadout, seed = 1, nightNumber = 1): NightS
     crystals: REGIONS.flatMap((r) => r.crystals.map((c) => ({ id: 0, region: r.id, pos: toWorld(r, c), taken: false }))).map((c, i) => ({ ...c, id: i + 1 })),
     wild: REGIONS.flatMap((r) => r.wanderers.map((w) => ({ region: r.id, home: toWorld(r, w), size: w.size, monsterId: null, backAt: 0 }))),
     region: 'camp',
+    nightNumber,
     outcome: 'playing',
     loadout,
     rng: makeRng(seed + nightNumber * 7919),
@@ -234,6 +236,12 @@ function roamTarget(s: NightState, home: Vec): Vec {
     if (isWalkable(p)) return p;
   }
   return { ...home };
+}
+
+/** How many monsters may head for camp at the same time on this night. */
+export function maxRaiders(nightNumber: number): number {
+  const m = NIGHT.maxRaiders;
+  return Math.min(m.most, m.first + m.perNight * (Math.max(1, nightNumber) - 1));
 }
 
 function nearestMonster(from: Vec, monsters: Monster[], range: number): Monster | null {
@@ -394,9 +402,11 @@ export function stepNight(s: NightState, dt: number, input: Input): NightEvent[]
 
   // New monsters. While the hero is out exploring, the pack holds camp and they come more slowly.
   const away = s.region !== 'camp';
+  const cap = maxRaiders(s.nightNumber);
+  const raiders = () => s.monsters.filter((m) => !m.wild).length;
   while (s.t >= s.nextSpawn && s.t < s.length - 3) {
-    spawn(s, ev);
-    if (progress(s) >= NIGHT.pairAfter && s.rng() < NIGHT.pairChance) spawn(s, ev);
+    if (raiders() < cap) spawn(s, ev);
+    if (progress(s) >= NIGHT.pairAfter && s.rng() < NIGHT.pairChance && raiders() < cap) spawn(s, ev);
     s.nextSpawn += spawnInterval(progress(s)) * s.paceScale * (away ? NIGHT.awayGentler : 1);
   }
   s.wild.forEach((slot, i) => {

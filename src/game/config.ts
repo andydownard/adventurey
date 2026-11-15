@@ -38,54 +38,56 @@ export const WORLD = {
 export const NIGHT = {
   // Long enough to run out and explore while the pack holds camp.
   lengthSec: 120,
-  campHealth: 12,
+  campHealth: 20,
   // Night 1 is gentle. Each night after it brings monsters a bit faster, down to a floor.
-  firstNightSlower: 1.4,
+  firstNightSlower: 1.6,
   slowerDropPerNight: 0.1,
   fastestScale: 0.85,
   // Seconds between monsters, from the start of the night to the end.
-  spawnEverySec: { start: 2.4, end: 0.75 },
+  spawnEverySec: { start: 3.6, end: 1.6 },
   // Late in the night, monsters sometimes come two at a time from different trails.
-  pairAfter: 0.5,
-  pairChance: 0.4,
+  pairAfter: 0.7,
+  pairChance: 0.2,
   // Big monsters start showing up after this share of the night.
-  bigAfter: 0.45,
-  bigChance: 0.25,
-  smallChance: 0.3,
+  bigAfter: 0.6,
+  bigChance: 0.12,
+  smallChance: 0.4,
+  // Never more than this many monsters heading for camp at once: 4 on night 1, one more each night, up to 8.
+  maxRaiders: { first: 4, perNight: 1, most: 8 },
   // While the hero is out exploring, monsters come to camp this much more slowly (the pack holds the line).
-  awayGentler: 1.6,
+  awayGentler: 1.3,
 } as const;
 
 export const HERO = {
   speed: 230,
   wolfPackSpeed: 265,
   radius: 22,
-  dizzySec: 0.7,
+  dizzySec: 0.45,
 } as const;
 
 export const SWORD = {
-  cooldownSec: 0.35,
-  reach: 105,
-  arcDeg: 130,
+  cooldownSec: 0.28,
+  reach: 130,
+  arcDeg: 170,
   damage: 2,
   knockback: 60,
 } as const;
 
 export const RANGED = {
-  bow: { cooldownSec: 0.42, speed: 760, damage: 1, pierce: 0, life: 0.9 },
-  crossbow: { cooldownSec: 0.85, speed: 980, damage: 2, pierce: 1, life: 0.9 },
+  bow: { cooldownSec: 0.36, speed: 760, damage: 1, pierce: 0, life: 0.9 },
+  crossbow: { cooldownSec: 0.7, speed: 980, damage: 2, pierce: 1, life: 0.9 },
 } as const;
 
 export const MONSTERS = {
-  small: { hp: 1, speed: 92, radius: 18, scale: 0.32, campDamage: 1 },
-  normal: { hp: 2, speed: 68, radius: 24, scale: 0.42, campDamage: 1 },
-  big: { hp: 5, speed: 46, radius: 36, scale: 0.62, campDamage: 2 },
+  small: { hp: 1, speed: 70, radius: 18, scale: 0.32, campDamage: 1 },
+  normal: { hp: 2, speed: 52, radius: 24, scale: 0.42, campDamage: 1 },
+  big: { hp: 4, speed: 38, radius: 36, scale: 0.62, campDamage: 2 },
 } as const;
 
 export const PETS = {
-  dragon: { range: 270, everySec: 1.6, damage: 1, slowSec: 2, slowFactor: 0.45, speed: 240 },
-  wolf: { range: 320, everySec: 1.0, damage: 1, speed: 290 },
-  owl: { range: 420, everySec: 2.0, damage: 2, speed: 340 },
+  dragon: { range: 300, everySec: 1.2, damage: 1, slowSec: 2, slowFactor: 0.45, speed: 240 },
+  wolf: { range: 340, everySec: 0.8, damage: 1, speed: 290 },
+  owl: { range: 440, everySec: 1.5, damage: 2, speed: 340 },
   // The Dragon Pack makes every pet hit a little harder.
   dragonPackBonus: 1,
   followDistance: 70,
@@ -100,8 +102,8 @@ export const ALLIES = {
   kinds: ['staff', 'shield'] as const,
   guardRadius: 300, // how far from the fire they go to meet a monster
   speed: 150,
-  staff: { range: 230, everySec: 2.2, damage: 1 }, // a small magic bolt
-  shield: { range: 46, everySec: 1.8, damage: 1 }, // a bonk with the club
+  staff: { range: 200, everySec: 3.0, damage: 1 }, // a small magic bolt
+  shield: { range: 40, everySec: 2.6, damage: 1 }, // a bonk with the club
 } as const;
 
 export const REWARDS = {
@@ -151,7 +153,7 @@ export const REGIONS: Region[] = [
       { x: 240, y: 760, color: 0x7fc8ff, radius: 200, intensity: 1.0 },
     ],
     crystals: [{ x: 470, y: 330 }, { x: 1180, y: 560 }, { x: 720, y: 770 }, { x: 400, y: 640 }, { x: 1180, y: 280 }],
-    wanderers: [{ x: 600, y: 450, size: 'normal' }, { x: 700, y: 250, size: 'small' }, { x: 400, y: 350, size: 'small' }],
+    wanderers: [{ x: 600, y: 450, size: 'normal' }, { x: 400, y: 350, size: 'small' }],
   },
   {
     id: 'forest', image: 'region-forest.jpg', offset: { x: 25, y: 1024 }, ambient: 0x3f5c6c, tint: 0xb6f5c8,
@@ -166,7 +168,7 @@ export const REGIONS: Region[] = [
       { x: 1030, y: 715, color: 0x7fb8ff, radius: 180, intensity: 1.0 },
     ],
     crystals: [{ x: 700, y: 330 }, { x: 950, y: 500 }, { x: 360, y: 620 }, { x: 1250, y: 520 }, { x: 850, y: 780 }],
-    wanderers: [{ x: 560, y: 720, size: 'small' }, { x: 1000, y: 450, size: 'normal' }, { x: 700, y: 700, size: 'normal' }],
+    wanderers: [{ x: 560, y: 720, size: 'small' }, { x: 1000, y: 450, size: 'normal' }],
   },
   {
     id: 'cave', image: 'region-cave.jpg', offset: { x: 1536, y: 85 }, ambient: 0x4a4274, tint: 0xd8b8ff,
@@ -186,7 +188,7 @@ export const REGIONS: Region[] = [
       { x: 1350, y: 770, color: 0x50ff90, radius: 220, intensity: 1.2 },
     ],
     crystals: [{ x: 330, y: 330 }, { x: 760, y: 620 }, { x: 1150, y: 450 }, { x: 1210, y: 250 }, { x: 520, y: 820 }],
-    wanderers: [{ x: 700, y: 420, size: 'normal' }, { x: 1100, y: 620, size: 'big' }, { x: 650, y: 800, size: 'small' }],
+    wanderers: [{ x: 700, y: 420, size: 'normal' }, { x: 650, y: 800, size: 'small' }],
   },
   {
     id: 'mountain', image: 'region-mountain.jpg', offset: { x: 65, y: -1024 }, ambient: 0x5a6a94, tint: 0xe0e6f8,
@@ -197,17 +199,17 @@ export const REGIONS: Region[] = [
     ],
     lights: [{ x: 1150, y: 330, color: 0x8fb8ff, radius: 280, intensity: 0.9 }],
     crystals: [{ x: 420, y: 450 }, { x: 1160, y: 520 }, { x: 620, y: 720 }, { x: 330, y: 860 }, { x: 1000, y: 800 }],
-    wanderers: [{ x: 500, y: 500, size: 'normal' }, { x: 1050, y: 600, size: 'big' }, { x: 300, y: 700, size: 'small' }],
+    wanderers: [{ x: 500, y: 500, size: 'normal' }, { x: 300, y: 700, size: 'small' }],
   },
 ];
 
 // Monsters that live out in the wild. They roam near home and chase the hero who comes close.
 export const WILD = {
-  chaseRange: 300, // they notice the hero this close
-  leash: 560, // and give up when the hero is this far from their home
+  chaseRange: 210, // they notice the hero this close
+  leash: 420, // and give up when the hero is this far from their home
   roamRadius: 200,
   roamSpeed: 38,
-  respawnSec: 25, // a wild monster sent home comes back after this long
+  respawnSec: 40, // a wild monster sent home comes back after this long
 } as const;
 
 export const CRYSTALS = {
