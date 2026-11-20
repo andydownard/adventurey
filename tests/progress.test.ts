@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { BANNED, COPY } from '../src/data/copy';
 import { REWARDS } from '../src/game/config';
-import { applyNightResult, DEFAULT_PROGRESS, dragonStage, loadProgress, saveProgress, type KeyValueStore } from '../src/game/progress';
+import { applyNightResult, DEFAULT_PROGRESS, dragonStage, loadProgress, saveProgress, toggleTeam, type KeyValueStore } from '../src/game/progress';
 
 function memory(): KeyValueStore & { data: Record<string, string> } {
   const data: Record<string, string> = {};
@@ -54,5 +54,40 @@ describe('words on screen', () => {
   it('the screens get their words from COPY, not typed in place', () => {
     const ui = readFileSync('src/ui/screens.ts', 'utf8');
     expect(ui).not.toMatch(/You saved the camp/);
+  });
+});
+
+describe('the pet box', () => {
+  it('starts empty: you begin with just your first pet', () => {
+    expect(DEFAULT_PROGRESS.friends).toEqual([]);
+    expect(DEFAULT_PROGRESS.team).toEqual([]);
+  });
+  it('keeps new friends, and they come along next time', () => {
+    const p = applyNightResult(DEFAULT_PROGRESS, { crystals: 3, dragonPower: 0, saved: false, given: 2, newFriends: ['bunny', 'fox'] });
+    expect(p.friends).toEqual(['bunny', 'fox']);
+    expect(p.team).toEqual(['bunny', 'fox']);
+    expect(p.crystals).toBe(1);
+  });
+  it('never goes below zero crystals', () => {
+    const p = applyNightResult({ ...DEFAULT_PROGRESS, crystals: 1 }, { crystals: 0, dragonPower: 0, saved: false, given: 5 });
+    expect(p.crystals).toBe(0);
+  });
+  it('lets you leave friends home and bring them back, up to 7', () => {
+    let p = { ...DEFAULT_PROGRESS, friends: ['bunny', 'fox', 'mushroom', 'cub', 'bat', 'goat', 'penguin', 'hedgehog'] as typeof DEFAULT_PROGRESS.friends, team: [] as typeof DEFAULT_PROGRESS.team };
+    for (const k of p.friends) p = toggleTeam(p, k);
+    expect(p.team).toHaveLength(7);
+    expect(p.team).not.toContain('hedgehog');
+    p = toggleTeam(p, 'bunny');
+    expect(p.team).not.toContain('bunny');
+    p = toggleTeam(p, 'hedgehog');
+    expect(p.team).toContain('hedgehog');
+    expect(toggleTeam({ ...DEFAULT_PROGRESS }, 'fox').team).toEqual([]); // not found yet
+  });
+  it('ignores junk animals in saved data', () => {
+    const st = memory();
+    st.setItem('adventurey.progress', JSON.stringify({ friends: ['fox', 'dragonzilla', 'fox'], team: ['fox', 'bat'] }));
+    const p = loadProgress(st);
+    expect(p.friends).toEqual(['fox']);
+    expect(p.team).toEqual(['fox']);
   });
 });

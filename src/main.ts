@@ -8,10 +8,11 @@ import Phaser from 'phaser';
 import { sound } from './audio/sound';
 import { COPY } from './data/copy';
 import { applyNightResult, loadProgress, saveProgress, type Progress } from './game/progress';
-import { PlayScene } from './scenes/PlayScene';
+import { PlayScene, type PlayResult } from './scenes/PlayScene';
+import type { Mode } from './game/night';
 import { h } from './ui/dom';
 import { createHud, type Controls } from './ui/hud';
-import { gearScreen, packScreen, resultScreen, titleScreen, type AppCtx } from './ui/screens';
+import { gearScreen, packScreen, petBoxScreen, resultScreen, titleScreen, type AppCtx } from './ui/screens';
 
 function safeStorage(): Storage | null {
   try {
@@ -78,8 +79,10 @@ const ctx: AppCtx = {
     if (screen === 'title') show(titleScreen(ctx));
     if (screen === 'gear') show(gearScreen(ctx));
     if (screen === 'pack') show(packScreen(ctx));
+    if (screen === 'pets') show(petBoxScreen(ctx));
   },
-  startNight,
+  startNight: () => startNight('camp'),
+  startExplore: () => startNight('explore'),
   toast,
 };
 
@@ -94,7 +97,8 @@ function scene(): PlayScene | null {
   return (game?.scene.getScene('play') as PlayScene) ?? null;
 }
 
-function startNight() {
+function startNight(mode: Mode = 'camp') {
+  const exploring = mode === 'explore';
   const controls: Controls = { move: { x: 0, y: 0 }, swing: false };
   // The layer lets taps and clicks reach the game; only its panels catch them.
   const layer = h('div', { style: 'position:absolute;inset:0;pointer-events:none' });
@@ -114,26 +118,30 @@ function startNight() {
       h('div', { class: 'panel' },
         h('h2', {}, COPY.paused),
         h('div', { style: 'display:flex;gap:16px' },
-          h('button', { class: 'btn btn-alt', type: 'button', onclick: () => ctx.go('title') }, COPY.leave),
+          exploring
+            ? h('button', { class: 'btn btn-alt', type: 'button', onclick: () => { pausedPanel?.remove(); pausedPanel = null; sc.setPaused(false); sc.goHome(); } }, COPY.hud.headHome)
+            : h('button', { class: 'btn btn-alt', type: 'button', onclick: () => ctx.go('title') }, COPY.leave),
           h('button', { class: 'btn btn-main', type: 'button', onclick: togglePause }, COPY.resume))));
     layer.append(pausedPanel);
     (pausedPanel.querySelector('.btn-main') as HTMLElement).focus();
   };
 
-  const hud = createHud({ name: progress.name, pack: progress.pack, ranged: progress.ranged, nightNumber, controls, touch: isTouch, onPause: togglePause });
+  const hud = createHud({ name: progress.name, pack: progress.pack, ranged: progress.ranged, nightNumber, mode, controls, touch: isTouch, onPause: togglePause, onHeadHome: () => scene()?.goHome() });
   layer.append(hud.el);
 
-  const intro = h('div', { class: 'overlay', style: 'pointer-events:auto', role: 'dialog', 'aria-label': `Night ${nightNumber}` },
+  const introTitle = exploring ? COPY.explore : `Night ${nightNumber}`;
+  const intro = h('div', { class: 'overlay', style: 'pointer-events:auto', role: 'dialog', 'aria-label': introTitle },
     h('div', { class: 'panel' },
-      h('h2', {}, `Night ${nightNumber}`),
-      h('p', {}, COPY.nightIntro),
+      h('h2', {}, introTitle),
+      h('p', {}, exploring ? COPY.exploreIntro : COPY.nightIntro),
       h('div', { class: 'keys' }, ...(isTouch ? [h('span', { class: 'key' }, COPY.howToTouch)] : [
         h('span', { class: 'key' }, 'Move: WASD or arrows'),
         h('span', { class: 'key' }, 'Sword: Space'),
         h('span', { class: 'key' }, 'Shoot: click where you aim'),
+        h('span', { class: 'key' }, 'Give a crystal: E'),
         h('span', { class: 'key' }, 'Pause: Esc'),
       ])),
-      h('button', { class: 'btn btn-main', type: 'button', onclick: () => { intro.remove(); scene()?.begin(); } }, COPY.start)));
+      h('button', { class: 'btn btn-main', type: 'button', onclick: () => { intro.remove(); scene()?.begin(); } }, exploring ? COPY.startExplore : COPY.start)));
   layer.append(intro);
   show(layer);
   (intro.querySelector('.btn-main') as HTMLElement).focus();
@@ -141,19 +149,22 @@ function startNight() {
   const data = {
     loadout: { pet: progress.pet, ranged: progress.ranged, pack: progress.pack },
     nightNumber,
+    mode,
+    gems: progress.crystals,
+    friends: progress.team,
     seed: Math.floor(Math.random() * 1e9),
     hud,
     controls,
     onPauseKey: () => { if (!intro.isConnected) togglePause(); },
-    onEnd: (r: { saved: boolean; bonks: number; crystals: number; dragonPower: number }) => {
+    onEnd: (r: PlayResult) => {
       progress = applyNightResult(progress, r);
       saveProgress(store, progress);
       const played = nightNumber;
-      if (r.saved) nightNumber += 1;
+      if (r.saved && r.mode === 'camp') nightNumber += 1;
       stopGame();
       show(resultScreen(
-        { saved: r.saved, nightNumber: played, bonks: r.bonks, crystals: r.crystals, dragonPower: r.dragonPower, totalPower: progress.dragonPower },
-        () => startNight(),
+        { saved: r.saved, explore: r.mode === 'explore', nightNumber: played, bonks: r.bonks, crystals: r.crystals, dragonPower: r.dragonPower, totalPower: progress.dragonPower, newFriends: r.newFriends },
+        () => startNight(r.mode),
         () => ctx.go('title'),
       ));
     },

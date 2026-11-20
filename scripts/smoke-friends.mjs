@@ -1,0 +1,42 @@
+// Pet box, packs, the magic tree, and Explore: give a crystal to the snow fox, head home, and check it is saved.
+import { chromium } from 'playwright';
+const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
+const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+const errors = [];
+page.on('pageerror', (e) => errors.push('pageerror: ' + e.message));
+page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
+await page.addInitScript(() => localStorage.setItem('adventurey.progress', JSON.stringify({ name: 'Jack', pet: 'dragon', ranged: 'bow', pack: 'bunny', nightsSaved: 0, crystals: 5, dragonPower: 0, friends: ['bunny', 'mushroom'], team: ['bunny', 'mushroom'] })));
+await page.goto('http://localhost:4173/'); await page.waitForTimeout(1200);
+await page.screenshot({ path: 'test-results/look-title.png' });
+await page.getByRole('button', { name: /Pet box/ }).click(); await page.waitForTimeout(500);
+await page.screenshot({ path: 'test-results/look-petbox.png' });
+await page.getByRole('button', { name: 'Back' }).click();
+await page.getByRole('button', { name: 'Choose your pack' }).click(); await page.waitForTimeout(500);
+await page.screenshot({ path: 'test-results/look-packs.png' });
+await page.getByRole('button', { name: 'Go to camp' }).click(); await page.waitForTimeout(2500);
+await page.getByRole('button', { name: 'Start the night' }).click(); await page.waitForTimeout(400);
+await page.evaluate(() => window.__adventurey.scene().advance(25, { move: { x: 0, y: 0 }, swing: false, shoot: null }));
+await page.waitForTimeout(1500);
+await page.screenshot({ path: 'test-results/look-tree.png' });
+// Explore: walk to the fox.
+await page.evaluate(() => window.__adventurey.scene().goHome?.());
+await page.goto('http://localhost:4173/'); await page.waitForTimeout(1000);
+await page.getByRole('button', { name: 'Explore', exact: true }).click(); await page.waitForTimeout(2500);
+await page.getByRole('button', { name: 'Start exploring' }).click(); await page.waitForTimeout(300);
+await page.evaluate(() => { const sc = window.__adventurey.scene(); const fox = sc.s.animals.find((a) => a.kind === 'fox'); sc.s.hero.pos = { x: fox.pos.x - 90, y: fox.pos.y }; for (const a of sc.s.animals.filter(x => x.friend)) a.pos = { x: fox.pos.x - 160, y: fox.pos.y + 20 }; sc.advance(0.1, { move: { x: 0, y: 0 }, swing: false, shoot: null }); sc.cameras.main.centerOn(sc.s.hero.pos.x, sc.s.hero.pos.y); });
+await page.waitForTimeout(2500);
+await page.screenshot({ path: 'test-results/look-give.png' });
+await page.getByRole('button', { name: /Give a crystal/ }).click(); await page.waitForTimeout(300);
+const st = await page.evaluate(() => { const s = window.__adventurey.scene().s; return { gems: s.gems, friends: s.animals.filter(a => a.friend).map(a => a.kind) }; });
+console.log('AFTER GIVE', JSON.stringify(st));
+await page.waitForTimeout(400);
+await page.screenshot({ path: 'test-results/look-befriend.png' });
+await page.getByRole('button', { name: 'Head home' }).first().click();
+await page.getByRole('heading', { name: 'Back home!' }).waitFor({ timeout: 30000 });
+await page.screenshot({ path: 'test-results/look-home.png' });
+console.log('SAVED', JSON.stringify(await page.evaluate(() => JSON.parse(localStorage.getItem('adventurey.progress')))));
+const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('adventurey.progress')));
+if (!saved.friends.includes('fox') || saved.crystals !== 4) { console.log('FOX NOT SAVED'); process.exitCode = 1; }
+console.log('ERRORS', errors.length, errors.slice(0, 8).join('\n'));
+if (errors.length) process.exitCode = 1;
+await browser.close();

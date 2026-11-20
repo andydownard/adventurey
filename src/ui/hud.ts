@@ -1,6 +1,6 @@
 import { COPY } from '../data/copy';
-import { RANGED, SWORD } from '../game/config';
-import type { NightState } from '../game/night';
+import { ANIMALS, PACK_PERKS, RANGED, SWORD } from '../game/config';
+import { animalToBefriend, friendCount, type Mode, type NightState, type PackKind } from '../game/night';
 import type { Vec } from '../game/world';
 import { h, ICONS, svgIcon } from './dom';
 import { muteButton } from './mute';
@@ -11,6 +11,8 @@ export interface Controls {
   swing: boolean;
   /** Set by a quick tap so a very short touch still swings once. */
   swingTap?: boolean;
+  /** Set by the Give a crystal button. */
+  giveTap?: boolean;
 }
 
 export interface Hud {
@@ -21,17 +23,22 @@ export interface Hud {
   banner(title: string, line: string): void;
 }
 
-const PACK_ART = { wolf: 'art/wolf.jpg', dragon: 'art/packdragon.jpg' } as const;
+export const PACK_ART: Record<PackKind, string> = { wolf: 'art/wolf.jpg', dragon: 'art/packdragon.jpg', fox: 'art/foxpack.jpg', bunny: 'art/bunnypack.jpg' };
 const RANGED_ART = { bow: 'art/bow.jpg', crossbow: 'art/xbow.jpg' } as const;
 
-export function createHud(opts: { name: string; pack: 'wolf' | 'dragon'; ranged: 'bow' | 'crossbow'; nightNumber: number; controls: Controls; touch: boolean; onPause(): void }): Hud {
+export function createHud(opts: { name: string; pack: PackKind; ranged: 'bow' | 'crossbow'; nightNumber: number; mode: Mode; controls: Controls; touch: boolean; onPause(): void; onHeadHome(): void }): Hud {
+  const exploring = opts.mode === 'explore';
   const timeText = h('span', {}, '');
   const timeFill = h('div', { style: 'width:0%;background:linear-gradient(90deg,#8a6fd1,#ffd9b0)' });
   const campText = h('span', { style: 'color:var(--green)' }, '');
   const campFill = h('div', { style: 'width:100%;background:linear-gradient(90deg,#9fd3f2,#8ef0b0)' });
   const campBox = h('div', { class: 'camp-box' },
     h('div', { style: 'display:flex;justify-content:space-between;font-weight:800;font-size:18px' }, h('span', {}, COPY.hud.camp), campText),
-    h('div', { class: 'bar', role: 'progressbar', 'aria-label': 'Camp health' }, campFill));
+    h('div', { class: 'bar', role: 'progressbar', 'aria-label': 'Apples left' }, campFill));
+  if (exploring) campBox.style.display = 'none';
+  const friendText = h('b', { style: 'font:800 26px Cinzel,serif;color:var(--green)' }, '0');
+  const give = h('button', { class: 'btn btn-main give-btn', type: 'button', hidden: true }, COPY.hud.give, opts.touch ? null : h('kbd', {}, 'E'));
+  give.addEventListener('pointerdown', (e) => { e.preventDefault(); opts.controls.giveTap = true; });
   const bonkText = h('b', { style: 'font:800 26px Cinzel,serif;color:var(--green)' }, '0');
   const gemText = h('b', { style: 'font:800 26px Cinzel,serif;color:#c9b8f2' }, '0');
   const bannerTitle = h('div', { class: 'banner-title' }, '');
@@ -46,23 +53,30 @@ export function createHud(opts: { name: string; pack: 'wolf' | 'dragon'; ranged:
       h('div', { style: 'display:flex;flex-direction:column' },
         h('span', { style: 'font:800 20px Cinzel,serif' }, COPY.packs[opts.pack].name),
         h('span', { style: 'font-size:15px;color:var(--lav)' }, opts.name || COPY.moonDefault))),
-    h('div', { class: 'time-box' },
-      h('div', { style: 'display:flex;align-items:center;gap:10px;font:800 22px Cinzel,serif' }, svgIcon(ICONS.moon, '#c9b8f2', 22), `Night ${opts.nightNumber}`),
-      h('div', { style: 'display:flex;gap:6px;font-weight:800;font-size:16px;color:var(--lav)' }, timeText, COPY.hud.untilSunrise),
-      h('div', { class: 'bar', style: 'width:260px;height:10px', role: 'progressbar', 'aria-label': 'Time until sunrise' }, timeFill)),
-    h('div', { style: 'display:flex;gap:12px;align-items:flex-start' }, campBox, muteButton('position:static'),
+    exploring
+      ? h('div', { class: 'time-box' },
+        h('div', { style: 'display:flex;align-items:center;gap:10px;font:800 22px Cinzel,serif' }, svgIcon(ICONS.compass, '#c9b8f2', 22), COPY.hud.exploring),
+        h('div', { style: 'font-weight:800;font-size:16px;color:var(--lav)' }, timeText))
+      : h('div', { class: 'time-box' },
+        h('div', { style: 'display:flex;align-items:center;gap:10px;font:800 22px Cinzel,serif' }, svgIcon(ICONS.moon, '#c9b8f2', 22), `Night ${opts.nightNumber}`),
+        h('div', { style: 'display:flex;gap:6px;font-weight:800;font-size:16px;color:var(--lav)' }, timeText, COPY.hud.untilSunrise),
+        h('div', { class: 'bar', style: 'width:260px;height:10px', role: 'progressbar', 'aria-label': 'Time until sunrise' }, timeFill)),
+    h('div', { style: 'display:flex;gap:12px;align-items:flex-start' }, campBox,
+      exploring ? h('button', { class: 'btn btn-alt', type: 'button', style: 'min-height:56px;padding:0 22px;font-size:19px', onclick: opts.onHeadHome }, COPY.hud.headHome) : null,
+      muteButton('position:static'),
       h('button', { class: 'icon-btn', type: 'button', 'aria-label': COPY.hud.pause, style: 'position:static', onclick: opts.onPause }, svgIcon(ICONS.pause))));
 
   const bottom = h('div', { class: 'hud-bottom' },
     h('div', { class: 'pill', style: 'gap:22px;border-radius:20px;padding:10px 18px' },
       h('div', { style: 'display:flex;flex-direction:column' }, h('span', { style: 'font-size:15px;font-weight:800;color:var(--lav)' }, COPY.hud.bonks), bonkText),
-      h('div', { style: 'display:flex;flex-direction:column' }, h('span', { style: 'font-size:15px;font-weight:800;color:var(--lav)' }, COPY.hud.crystals), gemText)),
+      h('div', { style: 'display:flex;flex-direction:column' }, h('span', { style: 'font-size:15px;font-weight:800;color:var(--lav)' }, COPY.hud.crystals), gemText),
+      h('div', { style: 'display:flex;flex-direction:column' }, h('span', { style: 'font-size:15px;font-weight:800;color:var(--lav)' }, COPY.hud.friends), friendText)),
     h('div', { style: 'display:flex;gap:12px;padding:10px;border-radius:24px;background:rgba(6,9,20,.55)' },
       h('div', { class: 'slot' }, swordCool, h('img', { src: 'art/iron.jpg', alt: '' }), COPY.hud.sword, opts.touch ? null : h('kbd', {}, 'Space')),
       h('div', { class: 'slot' }, shotCool, h('img', { src: RANGED_ART[opts.ranged], alt: '' }), COPY.hud[opts.ranged], opts.touch ? null : h('kbd', {}, 'Click'))),
     h('div', { style: 'width:150px' }));
 
-  const el = h('div', { class: 'hud' }, top, banner, bottom);
+  const el = h('div', { class: 'hud' }, top, banner, bottom, give);
 
   if (opts.touch) {
     const nub = h('div', { class: 'nub' });
@@ -108,10 +122,10 @@ export function createHud(opts: { name: string; pack: 'wolf' | 'dragon'; ranged:
       campBox.classList.add('hurt');
     },
     update(s) {
-      const left = Math.max(0, Math.ceil(s.length - s.t));
-      const text = `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`;
+      const shown = exploring ? Math.floor(s.t) : Math.max(0, Math.ceil(s.length - s.t));
+      const text = `${Math.floor(shown / 60)}:${String(shown % 60).padStart(2, '0')}`;
       if (timeText.textContent !== text) timeText.textContent = text;
-      timeFill.style.width = `${Math.min(100, (s.t / s.length) * 100).toFixed(1)}%`;
+      if (!exploring) timeFill.style.width = `${Math.min(100, (s.t / s.length) * 100).toFixed(1)}%`;
       if (s.campHealth !== lastCamp) {
         lastCamp = s.campHealth;
         campText.textContent = `${s.campHealth} / ${s.maxCampHealth}`;
@@ -119,10 +133,14 @@ export function createHud(opts: { name: string; pack: 'wolf' | 'dragon'; ranged:
       }
       const b = String(s.bonks);
       if (bonkText.textContent !== b) bonkText.textContent = b;
-      const g = String(s.crystalsFound);
+      const g = String(s.gems);
       if (gemText.textContent !== g) gemText.textContent = g;
+      const f = `${friendCount(s)}/${ANIMALS.maxFriends}`;
+      if (friendText.textContent !== f) friendText.textContent = f;
+      const canGive = !!animalToBefriend(s);
+      if (give.hidden === canGive) give.hidden = !canGive;
       swordCool.style.height = `${Math.min(100, (s.hero.swordCd / SWORD.cooldownSec) * 100)}%`;
-      const shotMax = RANGED[s.loadout.ranged].cooldownSec;
+      const shotMax = RANGED[s.loadout.ranged].cooldownSec * (s.loadout.pack === 'bunny' ? PACK_PERKS.bunnyReloadScale : 1);
       shotCool.style.height = `${Math.min(100, (s.hero.shotCd / shotMax) * 100)}%`;
     },
   };

@@ -32,3 +32,14 @@ Design only. No code yet.
 - A "Play with friends" circle, and a moon you tap to type your name. Any name works, even a made-up one like Wolf.
 - Explore anywhere you want. Places include Aspen Forest, Cherry Blossom Valley, and the Ruins.
 - Built (2026-11-14): at night you can leave camp while your pack battles, and walk anywhere in a snow land, a forest, a cave area, and a mountain range. It is 2.5D everywhere.
+
+## Added 2026-11-19 (Jack)
+- Animals wander the wild. Give one a crystal and it follows you and helps fight. You can have up to 7 friends. Animals: snow fox, penguin, bunny archer (shoots arrows), bear cub, mushroom wizard (a walking mushroom with a book whose spells scatter monsters), cave bat, hedgehog, mountain goat.
+- A Pet box shows every animal you have collected. You start with one pet.
+- More packs: Snow Fox Pack and Bunny Pack.
+- You protect a magic tree that grows special golden apples, not a campfire. If the monsters steal all the apples, you lose.
+- Shooting a crystal with an arrow collects it.
+- Camp helpers fight too.
+- Nights get harder and harder.
+- Explore mode: a giant world to walk around; creatures come out and you fight them; animals to befriend.
+- Play with friends: online, each kid on their own iPad, joined with a room code (next).

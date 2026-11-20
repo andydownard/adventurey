@@ -166,10 +166,10 @@ class SoundManager {
     const ctx = this.ctx;
     const bus = this.ambientBus!;
 
-    // Campfire crackle: random tiny pops of filtered noise.
-    const crackle = () => {
-      const n = 1 + Math.floor(Math.random() * 3);
-      for (let i = 0; i < n; i++) this.hiss(0.03 + Math.random() * 0.05, { freq: 1500 + Math.random() * 3000, q: 4, vol: 0.05 + Math.random() * 0.08, at: Math.random() * 0.2, bus });
+    // The magic tree: soft, high shimmers, like leaves full of tiny bells.
+    const shimmer = () => {
+      const base = 2600 + Math.random() * 1400;
+      for (let i = 0; i < 2; i++) this.tone(base * (1 + i * 0.5), 0.5, { type: 'sine', vol: 0.012, attack: 0.08, at: i * 0.09, bus });
     };
     // Crickets: quick high chirps in little groups.
     const crickets = () => {
@@ -205,7 +205,7 @@ class SoundManager {
       };
       loop();
     };
-    every(crackle, 120, 420);
+    every(shimmer, 1800, 4200);
     every(crickets, 700, 1600);
     every(bell, 1400, 3200);
     this.stopDrone = () => {

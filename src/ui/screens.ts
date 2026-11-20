@@ -1,15 +1,16 @@
 import { COPY } from '../data/copy';
-import { dragonStage, type Progress } from '../game/progress';
+import { dragonStage, toggleTeam, type Progress } from '../game/progress';
 import type { PackKind, PetKind, RangedKind } from '../game/night';
-import { REWARDS } from '../game/config';
+import { ANIMAL_KINDS, ANIMALS, REWARDS, type AnimalKind } from '../game/config';
 import { fireflies, h, ICONS, svgIcon } from './dom';
 import { muteButton } from './mute';
 
 export interface AppCtx {
   progress: Progress;
   update(p: Partial<Progress>): void;
-  go(screen: 'title' | 'gear' | 'pack'): void;
+  go(screen: 'title' | 'gear' | 'pack' | 'pets'): void;
   startNight(): void;
+  startExplore(): void;
   toast(msg: string): void;
 }
 
@@ -28,7 +29,8 @@ function blurredForest() {
 }
 
 function header(title: string, sub: string) {
-  return h('div', { style: 'position:absolute;left:0;right:0;top:32px;display:flex;flex-direction:column;align-items:center;gap:6px' },
+  // The title strip lets clicks through, so the Back button under its edge still works.
+  return h('div', { style: 'position:absolute;left:0;right:0;top:32px;display:flex;flex-direction:column;align-items:center;gap:6px;pointer-events:none' },
     h('h1', { style: 'font-size:50px;color:#f4f1ff;text-shadow:0 0 22px rgba(142,240,176,.55)' }, title),
     h('p', { class: 'sub' }, sub));
 }
@@ -68,11 +70,12 @@ export function titleScreen(ctx: AppCtx): HTMLElement {
     h('nav', { 'aria-label': 'Main', style: 'position:absolute;left:0;right:0;top:420px;display:flex;flex-direction:column;align-items:center;gap:18px' },
       h('div', { style: 'display:flex;gap:18px' },
         h('button', { class: 'btn btn-main', type: 'button', style: 'width:300px', onclick: () => ctx.go('gear') }, svgIcon(ICONS.play, '#060914'), COPY.play),
-        h('button', { class: 'btn btn-glow soon', type: 'button', style: 'width:300px', 'aria-label': `${COPY.explore}. ${COPY.comingSoonTag}.`, onclick: () => ctx.toast(COPY.comingSoon) },
-          svgIcon(ICONS.compass, '#b6f5c8'), COPY.explore, h('span', { class: 'soon-tag' }, COPY.comingSoonTag))),
+        h('button', { class: 'btn btn-glow', type: 'button', style: 'width:300px', onclick: () => ctx.startExplore() },
+          svgIcon(ICONS.compass, '#b6f5c8'), COPY.explore)),
       h('div', { style: 'display:flex;gap:18px' },
-        h('button', { class: 'btn btn-alt', type: 'button', style: 'width:280px', onclick: () => ctx.go('gear') }, svgIcon(ICONS.sword, '#b6f5c8'), COPY.chooseGear),
-        h('button', { class: 'btn btn-alt', type: 'button', style: 'width:280px', onclick: () => ctx.go('pack') }, svgIcon(ICONS.paw, '#b6f5c8'), COPY.choosePack))),
+        h('button', { class: 'btn btn-alt', type: 'button', style: 'width:250px', onclick: () => ctx.go('gear') }, svgIcon(ICONS.sword, '#b6f5c8'), COPY.chooseGear),
+        h('button', { class: 'btn btn-alt', type: 'button', style: 'width:250px', onclick: () => ctx.go('pack') }, svgIcon(ICONS.paw, '#b6f5c8'), COPY.choosePack),
+        h('button', { class: 'btn btn-alt', type: 'button', style: 'width:250px', onclick: () => ctx.go('pets') }, svgIcon(ICONS.paw, '#b6f5c8'), `${COPY.petBox} (${p.friends.length})`))),
     muteButton('right:32px;bottom:26px'),
     h('div', { class: 'pill', style: 'position:absolute;left:50%;bottom:26px;transform:translateX(-50%);font-weight:800;font-size:18px' },
       `${COPY.nightsSaved}: ${p.nightsSaved}`, h('span', { style: 'opacity:.5' }, '·'),
@@ -134,9 +137,52 @@ export function packScreen(ctx: AppCtx): HTMLElement {
       ...blurredForest(),
       backButton(() => ctx.go('gear')),
       header(COPY.packTitle, COPY.packSub),
-      h('div', { class: 'pack-cards' }, packCard('wolf', 'wolf.jpg'), packCard('dragon', 'packdragon.jpg')),
+      h('div', { class: 'pack-cards' }, packCard('wolf', 'wolf.jpg'), packCard('dragon', 'packdragon.jpg'), packCard('fox', 'foxpack.jpg'), packCard('bunny', 'bunnypack.jpg')),
       h('button', { class: 'btn btn-main', type: 'button', style: 'position:absolute;right:40px;bottom:30px;width:260px', onclick: () => ctx.startNight() },
         COPY.goToCamp, svgIcon(ICONS.next, '#060914')),
+    );
+  };
+  render();
+  return root;
+}
+
+// ---------------- Pet box ----------------
+const PET_ART: Record<PetKind, string> = { dragon: 'babydragon.jpg', wolf: 'pup.jpg', owl: 'owl.jpg' };
+
+export function petBoxScreen(ctx: AppCtx): HTMLElement {
+  const root = h('section', { class: 'screen', 'aria-label': COPY.petBox });
+  const render = () => {
+    const p = ctx.progress;
+    const starter = h('div', { class: 'pet-card on' },
+      h('img', { src: ART + PET_ART[p.pet], alt: '', class: 'starter' }),
+      h('span', { class: 'display' }, COPY.pets[p.pet]),
+      h('small', {}, COPY.petBoxStarter));
+    const cardFor = (k: AnimalKind) => {
+      const found = p.friends.includes(k);
+      const coming = p.team.includes(k);
+      const info = COPY.animals[k];
+      if (!found) {
+        return h('div', { class: 'pet-card locked' },
+          h('img', { src: `${ART}pets/${k}.png`, alt: '' }),
+          h('span', { class: 'display' }, COPY.petBoxLocked),
+          h('small', {}, `${COPY.petBoxHint} ${info.home}`));
+      }
+      return h('button', { class: 'pet-card', type: 'button', 'aria-pressed': String(coming), onclick: () => {
+        const next = toggleTeam(p, k);
+        if (next === p && !coming) ctx.toast(COPY.petBoxFull);
+        ctx.update({ team: next.team });
+        render();
+      } },
+        h('img', { src: `${ART}pets/${k}.png`, alt: '' }),
+        h('span', { class: 'display' }, info.name),
+        h('small', {}, info.power),
+        h('span', { class: coming ? 'tag' : 'tag off' }, coming ? COPY.petBoxComing : COPY.petBoxStaying));
+    };
+    root.replaceChildren(
+      ...blurredForest(),
+      backButton(() => ctx.go('title')),
+      header(COPY.petBox, `${COPY.petBoxSub} ${p.team.length}/${ANIMALS.maxFriends}`),
+      h('div', { class: 'pet-grid' }, starter, ...ANIMAL_KINDS.map(cardFor)),
     );
   };
   render();
@@ -146,11 +192,13 @@ export function packScreen(ctx: AppCtx): HTMLElement {
 // ---------------- Results ----------------
 export interface NightResult {
   saved: boolean;
+  explore?: boolean;
   nightNumber: number;
   bonks: number;
   crystals: number;
   dragonPower: number;
   totalPower: number;
+  newFriends?: AnimalKind[];
 }
 
 export function resultScreen(r: NightResult, onNext: () => void, onForest: () => void): HTMLElement {
@@ -158,6 +206,27 @@ export function resultScreen(r: NightResult, onNext: () => void, onForest: () =>
     ? h('img', { class: 'bg', src: ART + 'sunrise.jpg', alt: '', 'aria-hidden': 'true', style: 'left:0;top:-27px;width:1280px;height:853px' })
     : h('img', { class: 'bg', src: ART + 'camp.jpg', alt: '', 'aria-hidden': 'true', style: 'left:0;top:-27px;width:1280px;height:853px;filter:brightness(.55) saturate(.8)' });
   const reward = (value: string | number, label: string) => h('div', { class: 'reward' }, h('b', {}, String(value)), label);
+  const friends = (r.newFriends ?? []).length
+    ? h('div', { class: 'new-friends' }, h('span', {}, COPY.friendsMade), ...(r.newFriends ?? []).map((k) => h('img', { src: `${ART}pets/${k}.png`, alt: COPY.animals[k].name })))
+    : null;
+  if (r.explore) {
+    return h('section', { class: 'screen', 'aria-label': COPY.exploreBack },
+      h('img', { class: 'bg', src: ART + 'camp.jpg', alt: '', 'aria-hidden': 'true', style: 'left:0;top:-27px;width:1280px;height:853px' }),
+      h('div', { class: 'shade', 'aria-hidden': 'true' }),
+      h('div', { class: 'result-head' },
+        h('span', { class: 'kicker' }, COPY.explore.toUpperCase()),
+        h('h1', {}, COPY.exploreBack),
+        h('p', {}, COPY.exploreLine)),
+      h('div', { class: 'rewards' },
+        reward(r.bonks, COPY.hud.bonks),
+        reward(`+${r.crystals}`, COPY.crystals),
+        reward((r.newFriends ?? []).length, COPY.friendsMade)),
+      friends,
+      h('div', { class: 'result-actions' },
+        h('button', { class: 'btn btn-alt', type: 'button', style: 'width:260px', onclick: onForest }, COPY.toForest),
+        h('button', { class: 'btn btn-main', type: 'button', style: 'width:260px', onclick: onNext }, COPY.explore)),
+    );
+  }
   return h('section', { class: 'screen', 'aria-label': r.saved ? COPY.sunriseTitle : COPY.fellTitle },
     bg,
     h('div', { class: 'shade', 'aria-hidden': 'true' }),
@@ -169,6 +238,7 @@ export function resultScreen(r: NightResult, onNext: () => void, onForest: () =>
       reward(r.bonks, COPY.hud.bonks),
       reward(`+${r.crystals}`, COPY.crystals),
       reward(`${r.totalPower}/${REWARDS.dragonPowerMax}`, `${COPY.dragonPower}${r.dragonPower ? ' (+1)' : ''}`)),
+    friends,
     h('div', { class: 'result-actions' },
       h('button', { class: 'btn btn-alt', type: 'button', style: 'width:260px', onclick: onForest }, COPY.toForest),
       h('button', { class: 'btn btn-main', type: 'button', style: 'width:260px', onclick: onNext }, r.saved ? COPY.nextNight : COPY.tryAgain)),

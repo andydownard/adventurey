@@ -75,11 +75,11 @@ h1, h2, .display { font-family: Cinzel, serif; font-weight: 800; margin: 0; }
 .card small { display: block; margin-top: 4px; font: 700 15px Nunito, sans-serif; color: var(--lav); }
 .card[aria-pressed="true"] { background: rgba(142,240,176,.16); border: 3px solid var(--aurora); box-shadow: 0 0 22px rgba(142,240,176,.45); }
 .card:disabled { cursor: not-allowed; opacity: .6; border-style: dashed; }
-.pack-cards { position: absolute; left: 0; right: 0; top: 160px; display: flex; justify-content: center; gap: 48px; }
-.pack-card { flex-direction: column; text-align: center; width: 440px; min-height: 470px; padding: 30px; border-radius: 32px; gap: 14px; }
-.pack-card img { width: 300px; height: 230px; border-radius: 22px; box-shadow: 0 10px 30px rgba(0,0,0,.5); }
-.pack-card .display { font-size: 40px; }
-.pack-card small { font-size: 20px; line-height: 1.35; }
+.pack-cards { position: absolute; left: 0; right: 0; top: 160px; display: flex; justify-content: center; gap: 22px; }
+.pack-card { flex-direction: column; text-align: center; width: 280px; min-height: 470px; padding: 22px; border-radius: 30px; gap: 12px; }
+.pack-card img { width: 230px; height: 230px; object-fit: cover; border-radius: 22px; box-shadow: 0 10px 30px rgba(0,0,0,.5); }
+.pack-card .display { font-size: 30px; }
+.pack-card small { font-size: 18px; line-height: 1.35; }
 .tag { padding: 6px 18px; border-radius: 999px; background: var(--aurora); color: var(--ink); font-weight: 800; font-size: 18px; }
 
 /* Overlays during play */
@@ -149,3 +149,23 @@ h1, h2, .display { font-family: Cinzel, serif; font-weight: 800; margin: 0; }
 @keyframes banner { 0% { opacity: 0; transform: translate(-50%, 10px); } 12% { opacity: 1; transform: translate(-50%, 0); } 75% { opacity: 1; } 100% { opacity: 0; } }
 @keyframes banner-still { 0% { opacity: 0; } 8% { opacity: 1; } 80% { opacity: 1; } 100% { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .region-banner.show { animation-name: banner-still; } }
+
+/* Give a crystal: shows up when you stand next to an animal. */
+.give-btn { position: absolute; left: 50%; bottom: 150px; transform: translateX(-50%); min-height: 64px; padding: 0 32px; font-size: 22px; box-shadow: 0 0 28px 6px rgba(142,240,176,.45); }
+.give-btn[hidden] { display: none; }
+.give-btn kbd { margin-left: 10px; }
+
+/* Pet box */
+.pet-grid { position: absolute; left: 56px; right: 56px; top: 150px; display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; }
+.pet-card { display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 6px; padding: 14px 10px; min-height: 290px; box-sizing: border-box; border-radius: 24px; background: rgba(8,12,32,.86); border: 2px solid rgba(201,184,242,.4); color: var(--text, #f3f0ff); font-family: Nunito, sans-serif; text-align: center; }
+button.pet-card { cursor: pointer; }
+.pet-card[aria-pressed="true"], .pet-card.on { border-color: #8ef0b0; box-shadow: 0 0 22px rgba(142,240,176,.35); }
+.pet-card img { height: 120px; max-width: 170px; object-fit: contain; }
+.pet-card img.starter { width: 150px; height: 120px; object-fit: cover; border-radius: 18px; }
+.pet-card .display { font: 800 21px Cinzel, serif; }
+.pet-card small { font-size: 16px; font-weight: 700; line-height: 1.3; color: #e6e1ff; }
+.pet-card.locked img { filter: brightness(0) saturate(0); opacity: .55; }
+.pet-card.locked .display { color: #a99fd0; }
+.tag.off { background: rgba(201,184,242,.25); color: #f3f0ff; }
+.new-friends { position: absolute; left: 50%; bottom: 150px; transform: translateX(-50%); display: flex; align-items: center; gap: 12px; padding: 8px 18px; border-radius: 22px; background: rgba(8,12,32,.8); font-weight: 800; font-size: 20px; }
+.new-friends img { height: 64px; }
